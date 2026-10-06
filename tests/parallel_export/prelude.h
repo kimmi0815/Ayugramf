@@ -18,6 +18,7 @@
 #include <gsl/gsl>
 #include <range/v3/algorithm/find_if.hpp>
 #include "base/assertion.h"
+#include "base/flat_map.h"
 #include "rpl/rpl.h"
 
 using gsl::not_null;
@@ -41,6 +42,22 @@ inline MTPInputPeer MTP_inputPeerEmpty() {
 }
 
 namespace base {
+
+template <typename Type>
+class weak_qptr {
+public:
+	weak_qptr() = default;
+	weak_qptr(Type *value)
+	: _value(value), _lifetime(value ? value->testLifetime : nullptr) {
+	}
+	Type *get() const { return _lifetime.expired() ? nullptr : _value; }
+	explicit operator bool() const { return get() != nullptr; }
+
+private:
+	Type *_value = nullptr;
+	std::weak_ptr<int> _lifetime;
+
+};
 
 template <typename Type>
 Type take(Type &value) {

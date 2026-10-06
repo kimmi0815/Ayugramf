@@ -1,4 +1,5 @@
 #include "fake_domain.h"
+#include "export/export_takeout_session.h"
 
 rpl::producer<Main::Session*> Main::Account::sessionChanges() const {
 	return _changes.events();
@@ -42,6 +43,10 @@ Main::Transport &Main::Session::mtp() {
 	return _transport;
 }
 
+rpl::lifetime &Main::Session::lifetime() {
+	return _lifetime;
+}
+
 PeerData::PeerData(not_null<Main::Session*> session, uint64 peerId)
 : id{ peerId }
 , _session(session) {
@@ -58,19 +63,24 @@ MTPInputPeer PeerData::input() const {
 
 Export::Controller::Controller(
 		Main::Transport *mtp,
+		base::weak_qptr<TakeoutSession> takeout,
 		const MTPInputPeer &peer)
 : _session(mtp->session)
 , _peerId(peer.peerId) {
+	if (!takeout || takeout.get()->owner != _session) {
+		throw std::runtime_error("Controller received another account's takeout owner");
+	}
 	_live.push_back(this);
 }
 
 Export::Controller::Controller(
 		Main::Transport *mtp,
+		base::weak_qptr<TakeoutSession> takeout,
 		const MTPInputPeer &peer,
 		int32 topicRootId,
 		uint64 peerId,
 		const QString &topicTitle)
-: Controller(mtp, peer) {
+: Controller(mtp, takeout, peer) {
 	_topicRootId = topicRootId;
 }
 

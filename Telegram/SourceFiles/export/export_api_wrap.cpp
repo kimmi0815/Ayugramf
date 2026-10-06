@@ -707,7 +707,7 @@ template <typename Request>
 auto ApiWrap::mainRequest(Request &&request) {
 	Expects(_takeoutId.has_value());
 
-	auto original = std::move(_mtp.request(MTPInvokeWithTakeout<Request>(
+	auto original = std::move(_mtp->request(MTPInvokeWithTakeout<Request>(
 		MTP_long(*_takeoutId),
 		std::forward<Request>(request)
 	)).toDC(MTP::ShiftDcId(0, MTP::kExportDcShift)));
@@ -735,7 +735,7 @@ auto ApiWrap::fileRequest(const Data::FileLocation &location, int64 offset) {
 	Expects(_takeoutId.has_value());
 	Expects(_fileProcess->requestId == 0);
 
-	return std::move(_mtp.request(MTPInvokeWithTakeout<MTPupload_GetFile>(
+	return std::move(_mtp->request(MTPInvokeWithTakeout<MTPupload_GetFile>(
 		MTP_long(*_takeoutId),
 		MTPupload_GetFile(
 			MTP_flags(0),
@@ -767,8 +767,12 @@ auto ApiWrap::fileRequest(const Data::FileLocation &location, int64 offset) {
 
 ApiWrap::ApiWrap(
 	base::weak_qptr<MTP::Instance> weak,
-	Fn<void(FnMut<void()>)> runner)
-: _mtp(weak, std::move(runner))
+	Fn<void(FnMut<void()>)> runner,
+	base::weak_qptr<TakeoutSession> takeoutSession)
+: _mtp(std::make_unique<MTP::ConcurrentSender>(weak, runner))
+, _takeoutSession(takeoutSession)
+, _runner(std::move(runner))
+, _takeoutLease(std::make_shared<TakeoutSession::Lease>())
 , _fileCache(std::make_unique<LoadedFileCache>(kLocationCacheSize)) {
 }
 
@@ -784,6 +788,9 @@ void ApiWrap::startExport(
 		const Settings &settings,
 		Output::Stats *stats,
 		FnMut<void(StartInfo)> done) {
+	if (_cancelled) {
+		return;
+	}
 	Expects(_settings == nullptr);
 	Expects(_startProcess == nullptr);
 
@@ -1071,7 +1078,7 @@ void ApiWrap::startMainSession(FnMut<void()> done) {
 			? Flag::f_message_channels
 			: Flag(0));
 
-	_mtp.request(MTPusers_GetUsers(
+	_mtp->request(MTPusers_GetUsers(
 		MTP_vector<MTPInputUser>(1, MTP_inputUserSelf())
 	)).done([=, done = std::move(done)](
 			const MTPVector<MTPUser> &result) mutable {
@@ -1087,18 +1094,24 @@ void ApiWrap::startMainSession(FnMut<void()> done) {
 			error("Could not retrieve selfId.");
 			return;
 		}
-		_mtp.request(MTPaccount_InitTakeoutSession(
-			MTP_flags(flags),
-			MTP_long(sizeLimit)
-		)).done([=, done = std::move(done)](
-				const MTPaccount_Takeout &result) mutable {
-			_takeoutId = result.match([](const MTPDaccount_takeout &data) {
-				return data.vid().v;
-			});
-			done();
-		}).fail([=](const MTP::Error &result) {
-			error(result);
-		}).toDC(MTP::ShiftDcId(0, MTP::kExportDcShift)).send();
+		const auto lease = _takeoutLease;
+		lease->flags = flags;
+		lease->sizeLimit = sizeLimit;
+		lease->runner = _runner;
+		lease->ready = [=, done = std::move(done)](uint64 id) mutable {
+			if (!_cancelled) {
+				_takeoutId = id;
+				done();
+			}
+		};
+		lease->failed = [=](const MTP::Error &result) {
+			if (!_cancelled) {
+				error(result);
+			}
+		};
+		crl::on_main(_takeoutSession, [=, session = _takeoutSession] {
+			session->acquire(lease);
+		});
 	}).fail([=](const MTP::Error &result) {
 		error(result);
 	}).send();
@@ -1866,31 +1879,44 @@ void ApiWrap::messagesCountLoaded(int localSplitIndex, int count) {
 }
 
 void ApiWrap::finishExport(FnMut<void()> done) {
-	const auto guard = gsl::finally([&] { _takeoutId = std::nullopt; });
-
-	mainRequest(MTPaccount_FinishTakeoutSession(
-		MTP_flags(MTPaccount_FinishTakeoutSession::Flag::f_success)
-	)).done(std::move(done)).send();
+	_takeoutId = std::nullopt;
+	_takeoutLease->cancelled = true;
+	_mtp.reset();
+	crl::on_main(_takeoutSession, [
+		session = _takeoutSession,
+		lease = _takeoutLease,
+		done = std::move(done)
+	]() mutable {
+		session->release(std::move(lease), true, std::move(done));
+	});
 }
 
 void ApiWrap::skipFile(uint64 randomId) {
-	if (!_fileProcess || _fileProcess->randomId != randomId) {
+	if (_cancelled || !_mtp
+		|| !_fileProcess || _fileProcess->randomId != randomId) {
 		return;
 	}
 	LOG(("Export Info: File skipped."));
 	Assert(!_fileProcess->requests.empty());
 	Assert(_fileProcess->requestId != 0);
-	_mtp.request(base::take(_fileProcess->requestId)).cancel();
+	_mtp->request(base::take(_fileProcess->requestId)).cancel();
 	base::take(_fileProcess)->done(QString());
 }
 
 void ApiWrap::cancelExportFast() {
-	if (_takeoutId.has_value()) {
-		const auto requestId = mainRequest(MTPaccount_FinishTakeoutSession(
-			MTP_flags(0)
-		)).send();
-		_mtp.request(requestId).detach();
+	if (_cancelled) {
+		return;
 	}
+	_cancelled = true;
+	_takeoutId = std::nullopt;
+	_takeoutLease->cancelled = true;
+	_mtp.reset();
+	crl::on_main(_takeoutSession, [
+		session = _takeoutSession,
+		lease = _takeoutLease
+	] {
+		session->release(lease, false);
+	});
 }
 
 void ApiWrap::requestSinglePeerDialog() {
@@ -3799,6 +3825,7 @@ void ApiWrap::filePartUnavailable() {
 }
 
 void ApiWrap::error(const MTP::Error &error) {
+	cancelExportFast();
 	_errors.fire_copy(error);
 }
 
@@ -3808,9 +3835,12 @@ void ApiWrap::error(const QString &text) {
 }
 
 void ApiWrap::ioError(const Output::Result &result) {
+	cancelExportFast();
 	_ioErrors.fire_copy(result);
 }
 
-ApiWrap::~ApiWrap() = default;
+ApiWrap::~ApiWrap() {
+	cancelExportFast();
+}
 
 } // namespace Export

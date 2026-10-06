@@ -47,12 +47,14 @@ public:
 	Account &account();
 	Data::Session &data();
 	Transport &mtp();
+	rpl::lifetime &lifetime();
 
 private:
 	Account _ownedAccount;
 	Account *_account = nullptr;
 	Data::Session _data;
 	Transport _transport;
+	rpl::lifetime _lifetime;
 
 };
 
@@ -75,6 +77,8 @@ private:
 };
 
 namespace Export {
+
+class TakeoutSession;
 
 struct PasswordCheckState {
 };
@@ -104,9 +108,13 @@ public:
 		rpl::event_stream<State> changes;
 	};
 
-	Controller(Main::Transport *mtp, const MTPInputPeer &peer);
 	Controller(
 		Main::Transport *mtp,
+		base::weak_qptr<TakeoutSession> takeout,
+		const MTPInputPeer &peer);
+	Controller(
+		Main::Transport *mtp,
+		base::weak_qptr<TakeoutSession> takeout,
 		const MTPInputPeer &peer,
 		int32 topicRootId,
 		uint64 peerId,

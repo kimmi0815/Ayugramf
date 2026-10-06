@@ -36,10 +36,12 @@ public:
 	ControllerObject(
 		crl::weak_on_queue<ControllerObject> weak,
 		QPointer<MTP::Instance> mtproto,
+		base::weak_qptr<TakeoutSession> takeoutSession,
 		const MTPInputPeer &peer);
 	ControllerObject(
 		crl::weak_on_queue<ControllerObject> weak,
 		QPointer<MTP::Instance> mtproto,
+		base::weak_qptr<TakeoutSession> takeoutSession,
 		const MTPInputPeer &peer,
 		int32 topicRootId,
 		uint64 peerId,
@@ -159,8 +161,9 @@ private:
 ControllerObject::ControllerObject(
 	crl::weak_on_queue<ControllerObject> weak,
 	QPointer<MTP::Instance> mtproto,
+	base::weak_qptr<TakeoutSession> takeoutSession,
 	const MTPInputPeer &peer)
-: _api(mtproto, weak.runner())
+: _api(mtproto, weak.runner(), takeoutSession)
 , _state(PasswordCheckState{}) {
 	_api.errors(
 	) | rpl::on_next([=](const MTP::Error &error) {
@@ -183,11 +186,12 @@ ControllerObject::ControllerObject(
 ControllerObject::ControllerObject(
 	crl::weak_on_queue<ControllerObject> weak,
 	QPointer<MTP::Instance> mtproto,
+	base::weak_qptr<TakeoutSession> takeoutSession,
 	const MTPInputPeer &peer,
 	int32 topicRootId,
 	uint64 peerId,
 	const QString &topicTitle)
-: _api(mtproto, weak.runner())
+: _api(mtproto, weak.runner(), takeoutSession)
 , _state(PasswordCheckState{})
 , _topicRootId(topicRootId)
 , _topicPeerId(peerId)
@@ -231,6 +235,9 @@ bool ControllerObject::stopped() const {
 void ControllerObject::setState(State &&state) {
 	if (stopped()) {
 		return;
+	}
+	if (v::is<ApiErrorState>(state) || v::is<OutputErrorState>(state)) {
+		_api.cancelExportFast();
 	}
 	_state = std::move(state);
 	_stateChanges.fire_copy(_state);
@@ -840,18 +847,21 @@ void ControllerObject::setFinishedState() {
 
 Controller::Controller(
 	QPointer<MTP::Instance> mtproto,
+	base::weak_qptr<TakeoutSession> takeoutSession,
 	const MTPInputPeer &peer)
-: _wrapped(std::move(mtproto), peer) {
+: _wrapped(std::move(mtproto), std::move(takeoutSession), peer) {
 }
 
 Controller::Controller(
 	QPointer<MTP::Instance> mtproto,
+	base::weak_qptr<TakeoutSession> takeoutSession,
 	const MTPInputPeer &peer,
 	int32 topicRootId,
 	uint64 peerId,
 	const QString &topicTitle)
 : _wrapped(
 	std::move(mtproto),
+	std::move(takeoutSession),
 	peer,
 	static_cast<int32>(topicRootId),
 	static_cast<uint64>(peerId),

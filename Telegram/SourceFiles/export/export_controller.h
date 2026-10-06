@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #pragma once
 
 #include "base/variant.h"
+#include "base/weak_qptr.h"
 #include "mtproto/mtproto_response.h"
 
 #include <QtCore/QPointer>
@@ -20,6 +21,7 @@ class Instance;
 namespace Export {
 
 class ControllerObject;
+class TakeoutSession;
 struct Settings;
 struct Environment;
 
@@ -116,9 +118,11 @@ class Controller {
 public:
 	Controller(
 		QPointer<MTP::Instance> mtproto,
+		base::weak_qptr<TakeoutSession> takeoutSession,
 		const MTPInputPeer &peer);
 	Controller(
 		QPointer<MTP::Instance> mtproto,
+		base::weak_qptr<TakeoutSession> takeoutSession,
 		const MTPInputPeer &peer,
 		int32 topicRootId,
 		uint64 peerId,

@@ -12,11 +12,34 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_session.h"
 #include "export/view/export_view_panel_controller.h"
 #include "export/export_controller.h"
+#include "export/export_takeout_session.h"
 #include "main/main_account.h"
 #include "main/main_session.h"
 #include "ui/layers/box_content.h"
 
 namespace Export {
+
+base::weak_qptr<TakeoutSession> TakeoutSession::ForSession(
+		not_null<Main::Session*> session) {
+	static auto sessions = base::flat_map<
+		Main::Session*,
+		base::weak_qptr<TakeoutSession>>();
+	for (auto i = begin(sessions); i != end(sessions);) {
+		if (!i->second) {
+			i = sessions.erase(i);
+		} else {
+			++i;
+		}
+	}
+	const auto i = sessions.find(session);
+	if (i != end(sessions)) {
+		return i->second;
+	}
+	const auto result = session->lifetime().make_state<TakeoutSession>(
+		&session->mtp());
+	sessions.emplace(session, result);
+	return result;
+}
 
 struct Manager::Job {
 	uint64 id = 0;
@@ -55,6 +78,7 @@ void Manager::startTopic(
 	job->topicRootId = rootId;
 	job->controller = std::make_unique<Controller>(
 		&session->mtp(),
+		TakeoutSession::ForSession(session),
 		peer->input(),
 		rootId,
 		peerId,
@@ -77,6 +101,7 @@ void Manager::start(
 	job->peerId = peerId;
 	job->controller = std::make_unique<Controller>(
 		&session->mtp(),
+		TakeoutSession::ForSession(session),
 		singlePeer);
 	setupPanel(std::move(job));
 }

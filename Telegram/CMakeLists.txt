@@ -2514,6 +2514,11 @@ else()
 endif()
 
 set_target_properties(Telegram PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${output_folder})
+if (TDESKTOP_DEBUG_OUTPUT_DIRECTORY)
+    set_target_properties(Telegram PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TDESKTOP_DEBUG_OUTPUT_DIRECTORY}"
+    )
+endif()
 
 if (MSVC)
     target_link_libraries(Telegram

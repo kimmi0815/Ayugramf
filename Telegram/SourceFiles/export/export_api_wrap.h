@@ -7,8 +7,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
-#include "mtproto/mtproto_concurrent_sender.h"
 #include "data/data_peer_id.h"
+#include "export/export_takeout_session.h"
+#include "mtproto/mtproto_concurrent_sender.h"
 
 namespace Export {
 namespace Data {
@@ -44,7 +45,8 @@ class ApiWrap {
 public:
 	ApiWrap(
 		base::weak_qptr<MTP::Instance> weak,
-		Fn<void(FnMut<void()>)> runner);
+		Fn<void(FnMut<void()>)> runner,
+		base::weak_qptr<TakeoutSession> takeoutSession);
 
 	rpl::producer<MTP::Error> errors() const;
 	rpl::producer<Output::Result> ioErrors() const;
@@ -330,10 +332,14 @@ private:
 	void error(const QString &text);
 	void ioError(const Output::Result &result);
 
-	MTP::ConcurrentSender _mtp;
+	std::unique_ptr<MTP::ConcurrentSender> _mtp;
+	base::weak_qptr<TakeoutSession> _takeoutSession;
+	Fn<void(FnMut<void()>)> _runner;
+	std::shared_ptr<TakeoutSession::Lease> _takeoutLease;
 	std::optional<uint64> _takeoutId;
 	std::optional<UserId> _selfId;
 	Output::Stats *_stats = nullptr;
+	bool _cancelled = false;
 
 	std::unique_ptr<Settings> _settings;
 	MTPInputUser _user = MTP_inputUserSelf();
