@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/qt/qt_common_adapters.h"
 #include "base/timer_rpl.h"
 #include "lang/lang_keys.h"
+#include "settings/sections/settings_premium.h"
 #include "menu/menu_sponsored.h"
 #include "boxes/premium_preview_box.h"
 #include "calls/calls_instance.h"
@@ -1546,6 +1547,10 @@ void OverlayWidget::checkForSaveLoaded() {
 }
 
 void OverlayWidget::showPremiumDownloadPromo() {
+	if (!Settings::PremiumPromotionAllowed()) {
+		uiShow()->showToast(tr::lng_cant_do_this(tr::now));
+		return;
+	}
 	const auto filter = [=](const auto &...) {
 		if (const auto window = uiShow()->resolveWindow()) {
 			ShowPremiumPreviewBox(window, PremiumFeature::Stories);

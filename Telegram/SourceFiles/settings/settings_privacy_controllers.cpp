@@ -712,7 +712,8 @@ object_ptr<Ui::RpWidget> LastSeenPrivacyController::setupBelowWidget(
 	Ui::AddDividerText(
 		content,
 		tr::lng_edit_lastseen_hide_read_time_about());
-	if (!controller->session().premium()) {
+	if (Settings::PremiumPromotionAllowed()
+		&& !controller->session().premium()) {
 		Ui::AddSkip(content);
 		content->add(object_ptr<Ui::SettingsButton>(
 			content,
@@ -1443,6 +1444,9 @@ object_ptr<Ui::RpWidget> VoicesPrivacyController::setupBelowWidget(
 		not_null<Window::SessionController*> controller,
 		not_null<QWidget*> parent,
 		rpl::producer<Option> option) {
+	if (!Settings::PremiumPromotionAllowed()) {
+		return nullptr;
+	}
 	using namespace rpl::mappers;
 
 	auto result = object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
@@ -1476,6 +1480,8 @@ Fn<void()> VoicesPrivacyController::premiumClickedCallback(
 		not_null<Window::SessionController*> controller) {
 	if (option == Option::Everyone) {
 		return nullptr;
+	} else if (!Settings::PremiumPromotionAllowed()) {
+		return [=] { controller->showToast(tr::lng_cant_do_this(tr::now)); };
 	}
 	const auto showToast = [=] {
 		auto link = tr::link(

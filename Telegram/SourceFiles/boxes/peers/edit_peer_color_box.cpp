@@ -625,6 +625,9 @@ bool ShowPremiumPreview(
 		not_null<PeerData*> peer) {
 	if (!peer->isSelf() || show->session().premium()) {
 		return false;
+	} else if (!Settings::PremiumPromotionAllowed()) {
+		show->showToast(tr::lng_cant_do_this(tr::now));
+		return true;
 	}
 	if (const auto controller = show->resolveWindow()) {
 		ShowPremiumPreviewBox(controller, PremiumFeature::PeerColors);
@@ -2082,6 +2085,10 @@ void EditPeerColorSection(
 	state->collectible.value(
 	) | rpl::on_next([=] {
 		const auto buy = state->buyCollectible.get();
+		button->setVisible(buy
+			|| !peer->isSelf()
+			|| peer->session().premium()
+			|| Settings::PremiumPromotionAllowed());
 		while (!button->children().isEmpty()) {
 			delete button->children().first();
 		}
@@ -2354,6 +2361,10 @@ void EditPeerProfileColorSection(
 	state->wearable.value(
 	) | rpl::on_next([=](EmojiStatusId id) {
 		const auto buy = state->buyCollectible.get();
+		button->setVisible(buy
+			|| !peer->isSelf()
+			|| peer->session().premium()
+			|| Settings::PremiumPromotionAllowed());
 		while (!button->children().isEmpty()) {
 			delete button->children().first();
 		}

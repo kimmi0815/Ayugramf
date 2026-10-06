@@ -1388,7 +1388,9 @@ void Filler::addCreatePoll() {
 }
 
 void Filler::addCreateTodoList() {
-	if (skipCreateActions()) {
+	if (skipCreateActions()
+		|| (!_peer->session().premium()
+			&& !Settings::PremiumPromotionAllowed())) {
 		return;
 	}
 	const auto can = _topic
@@ -1555,6 +1557,11 @@ void Filler::addToggleNoForwards() {
 		}).send();
 	};
 	const auto disabledNow = user->isAyuNoForwards();
+	if (!disabledNow
+		&& !peer->session().premium()
+		&& !Settings::PremiumPromotionAllowed()) {
+		return;
+	}
 	_addAction(disabledNow
 		? tr::lng_enable_sharing(tr::now)
 		: tr::lng_disable_sharing(tr::now), [=] {
@@ -1645,7 +1652,7 @@ void Filler::addSendGift() {
 
 	const auto peer = _peer;
 	const auto navigation = _controller;
-	_addAction(tr::lng_profile_gift_premium(tr::now), [=] {
+	_addAction(tr::lng_gift_send_title(tr::now), [=] {
 		Ui::ShowStarGiftBox(navigation, peer);
 	}, &st::menuIconGiftPremium);
 }
@@ -2437,6 +2444,9 @@ void PeerMenuCreatePoll(
 void PeerMenuTodoWantsPremium(TodoWantsPremium type) {
 	const auto window = Core::App().activeWindow();
 	if (!window) {
+		return;
+	} else if (!Settings::PremiumPromotionAllowed()) {
+		window->uiShow()->showToast(tr::lng_cant_do_this(tr::now));
 		return;
 	}
 	const auto filter = [=](const auto &...) {

@@ -17,6 +17,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
+#include "settings/sections/settings_premium.h"
 #include "ui/boxes/report_box_graphics.h" // AddReportOptionButton.
 #include "ui/layers/generic_box.h"
 #include "ui/painter.h"
@@ -165,47 +166,49 @@ void AboutBox(
 						tr::rich),
 				st::sponsoredAboutSplitIcon);
 		}
-		Ui::AddSkip(content);
-		Ui::AddSkip(content);
-		auto link = tr::lng_settings_privacy_premium_link(
-		) | rpl::map([](QString t) {
-			return tr::link(std::move(t), u"internal:"_q);
-		});
-		addEntry(
-			tr::lng_sponsored_revenued_info3_title(),
-			(isChannel
-				? tr::lng_sponsored_revenued_info3_description(
-					lt_count,
-					rpl::single(float64(levels)),
-					lt_link,
-					std::move(link),
-					tr::rich)
-				: isSearch
-				? tr::lng_sponsored_revenued_info3_search_description(
-					lt_link,
-					tr::lng_sponsored_revenued_info3_search_link(
-						lt_arrow,
-						rpl::single(
-							Ui::Text::IconEmoji(&st::textMoreIconEmoji)),
-						tr::marked
-					) | rpl::map([](TextWithEntities &&link) {
-						return Ui::Text::Wrapped(
-							std::move(link),
-							EntityType::CustomUrl,
-							u"internal:"_q);
-					}),
-					tr::rich)
-				: tr::lng_sponsored_revenued_info3_bot_description(
-					lt_link,
-					std::move(link),
-					tr::rich)),
-			st::sponsoredAboutRemoveIcon)->setClickHandlerFilter([=](
-					const auto &...) {
-				ShowPremiumPreviewBox(show, PremiumFeature::NoAds);
-				return true;
+		if (Settings::PremiumPromotionAllowed()) {
+			Ui::AddSkip(content);
+			Ui::AddSkip(content);
+			auto link = tr::lng_settings_privacy_premium_link(
+			) | rpl::map([](QString t) {
+				return tr::link(std::move(t), u"internal:"_q);
 			});
-		Ui::AddSkip(content);
-		Ui::AddSkip(content);
+			addEntry(
+				tr::lng_sponsored_revenued_info3_title(),
+				(isChannel
+					? tr::lng_sponsored_revenued_info3_description(
+						lt_count,
+						rpl::single(float64(levels)),
+						lt_link,
+						std::move(link),
+						tr::rich)
+					: isSearch
+					? tr::lng_sponsored_revenued_info3_search_description(
+						lt_link,
+						tr::lng_sponsored_revenued_info3_search_link(
+							lt_arrow,
+							rpl::single(
+								Ui::Text::IconEmoji(&st::textMoreIconEmoji)),
+							tr::marked
+						) | rpl::map([](TextWithEntities &&link) {
+							return Ui::Text::Wrapped(
+								std::move(link),
+								EntityType::CustomUrl,
+								u"internal:"_q);
+						}),
+						tr::rich)
+					: tr::lng_sponsored_revenued_info3_bot_description(
+						lt_link,
+						std::move(link),
+						tr::rich)),
+				st::sponsoredAboutRemoveIcon)->setClickHandlerFilter([=](
+						const auto &...) {
+					ShowPremiumPreviewBox(show, PremiumFeature::NoAds);
+					return true;
+				});
+			Ui::AddSkip(content);
+			Ui::AddSkip(content);
+		}
 	}
 	Ui::AddSkip(content);
 	Ui::AddSkip(content);
@@ -462,14 +465,16 @@ void FillSponsored(
 			.isSeparator = true,
 		});
 	}
-	addAction(tr::lng_sponsored_hide_ads(tr::now), [=] {
-		if (session->premium()) {
-			using Result = Data::SponsoredReportResult;
-			report.callback(Result::Id("-1"), [](const auto &) {});
-		} else {
-			ShowPremiumPreviewBox(show, PremiumFeature::NoAds);
-		}
-	}, (dark ? &st::mediaMenuIconCancel : &st::menuIconCancel));
+	if (session->premium() || Settings::PremiumPromotionAllowed()) {
+		addAction(tr::lng_sponsored_hide_ads(tr::now), [=] {
+			if (session->premium()) {
+				using Result = Data::SponsoredReportResult;
+				report.callback(Result::Id("-1"), [](const auto &) {});
+			} else {
+				ShowPremiumPreviewBox(show, PremiumFeature::NoAds);
+			}
+		}, (dark ? &st::mediaMenuIconCancel : &st::menuIconCancel));
+	}
 }
 
 void FillSponsored(

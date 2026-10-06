@@ -1350,6 +1350,7 @@ std::unique_ptr<Ui::RpWidget> PremiumRequiredSendRestriction(
 	const auto link = CreateChild<Ui::LinkButton>(
 		result.get(),
 		tr::lng_restricted_send_non_premium_more(tr::now));
+	link->setVisible(Settings::PremiumPromotionAllowed());
 	raw->paintRequest() | rpl::on_next([=](QRect clip) {
 		QPainter(raw).fillRect(clip, st::windowBg);
 	}, raw->lifetime());
@@ -1359,7 +1360,8 @@ std::unique_ptr<Ui::RpWidget> PremiumRequiredSendRestriction(
 		const auto margins = (st.textMargins + st.placeholderMargins);
 		const auto available = width - margins.left() - margins.right();
 		label->resizeToWidth(available);
-		const auto height = label->height() + link->height();
+		const auto height = label->height()
+			+ (link->isHidden() ? 0 : link->height());
 		const auto top = (raw->height() - height) / 2;
 		label->moveToLeft(margins.left(), top, width);
 		link->move(

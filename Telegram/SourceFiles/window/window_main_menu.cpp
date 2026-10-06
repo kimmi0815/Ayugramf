@@ -22,6 +22,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_document_media.h"
 #include "data/data_folder.h"
 #include "data/data_group_call.h"
+#include "data/data_peer_values.h"
 #include "data/data_session.h"
 #include "data/data_stories.h"
 #include "data/data_user.h"
@@ -40,6 +41,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/sections/settings_advanced.h"
 #include "settings/sections/settings_calls.h"
 #include "settings/sections/settings_information.h"
+#include "settings/sections/settings_premium.h"
 #include "storage/localstorage.h"
 #include "storage/storage_account.h"
 #include "support/support_templates.h"
@@ -421,9 +423,14 @@ MainMenu::MainMenu(
 	) | rpl::on_next([=] {
 		moveBadge();
 	}, lifetime());
-	_badge->setPremiumClickCallback([=] {
-		chooseEmojiStatus();
-	});
+	Data::AmPremiumValue(&controller->session()) | rpl::on_next([=](
+			bool premium) {
+		if (premium || Settings::PremiumPromotionAllowed()) {
+			_badge->setPremiumClickCallback([=] { chooseEmojiStatus(); });
+		} else {
+			_badge->setPremiumClickCallback(nullptr);
+		}
+	}, lifetime());
 	{
 		const auto user = controller->session().user();
 		const auto isCustomBadge = isCustomBadgePeer(getBareID(user));

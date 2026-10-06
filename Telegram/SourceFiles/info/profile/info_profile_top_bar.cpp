@@ -425,9 +425,15 @@ TopBar::TopBar(
 			std::move(badgeUpdates),
 			_badge->updated());
 
-		_badge->setPremiumClickCallback([controller, peer = _peer] {
-			::Settings::ShowEmojiStatusPremium(controller, peer);
-		});
+		EmojiStatusIdValue(_peer) | rpl::on_next([=](EmojiStatusId id) {
+			if (::Settings::PremiumPromotionAllowed() || id.collectible) {
+				_badge->setPremiumClickCallback([controller, peer = _peer] {
+					::Settings::ShowEmojiStatusPremium(controller, peer);
+				});
+			} else {
+				_badge->setPremiumClickCallback(nullptr);
+			}
+		}, lifetime());
 	}
 	if (_verified) {
 		badgeUpdates = rpl::merge(

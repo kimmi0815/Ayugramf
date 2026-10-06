@@ -5845,6 +5845,12 @@ bool Message::displayRightActionComments() const {
 std::optional<QSize> Message::rightActionSize() const {
 	if (AyuFeatures::MessageShot::isTakingShot()) {
 		return {};
+	} else if (data()->isSponsored()
+		&& !data()->history()->session().premium()
+		&& !Settings::PremiumPromotionAllowed()) {
+		return (_rightAction && _rightAction->second)
+			? QSize(st::historyFastCloseSize, st::historyFastCloseSize)
+			: std::optional<QSize>();
 	}
 
 	if (displayRightActionComments()) {
@@ -5937,10 +5943,14 @@ void Message::drawRightAction(
 	if (_rightAction->second && _rightAction->second->ripple) {
 		const auto &stm = context.messageStyle();
 		const auto colorOverride = &stm->msgWaveformInactive->c;
+		const auto offset = (data()->history()->session().premium()
+			|| Settings::PremiumPromotionAllowed())
+			? st::historyFastCloseSize
+			: 0;
 		_rightAction->second->ripple->paint(
 			p,
 			left,
-			top + st::historyFastCloseSize,
+			top + offset,
 			size->width(),
 			colorOverride);
 		if (_rightAction->second->ripple->empty()) {
@@ -5984,7 +5994,9 @@ void Message::drawRightAction(
 				views->repliesSmall.text,
 				views->repliesSmall.textWidth);
 		}
-	} else if (_rightAction->second) {
+	} else if (_rightAction->second
+		&& (data()->history()->session().premium()
+			|| Settings::PremiumPromotionAllowed())) {
 		st->historyFastCloseIcon().paintInCenter(
 			p,
 			QRect(left, top, size->width(), size->width()));
@@ -5993,7 +6005,10 @@ void Message::drawRightAction(
 			QRect(left, size->width() + top, size->width(), size->width()));
 	} else {
 		const auto &icon = data()->isSponsored()
-			? st->historyFastCloseIcon()
+			? ((data()->history()->session().premium()
+				|| Settings::PremiumPromotionAllowed())
+				? st->historyFastCloseIcon()
+				: st->historyFastMoreIcon())
 			: (displayFastShare()
 				&& !isPinnedContext()
 				&& this->context() != Context::SavedSublist)
@@ -6007,6 +6022,15 @@ ClickHandlerPtr Message::rightActionLink(
 		std::optional<QPoint> pressPoint) const {
 	if (delegate()->elementInSelectionMode(this).progress > 0) {
 		return nullptr;
+	} else if (data()->isSponsored()
+		&& !data()->history()->session().premium()
+		&& !Settings::PremiumPromotionAllowed()) {
+		if (_rightAction && pressPoint) {
+			_rightAction->lastPoint = *pressPoint;
+		}
+		return (_rightAction && _rightAction->second)
+			? _rightAction->second->link
+			: nullptr;
 	}
 	ensureRightAction();
 	if (!_rightAction->link) {

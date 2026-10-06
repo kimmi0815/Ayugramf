@@ -36,6 +36,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
 #include "settings/settings_common.h"
+#include "settings/sections/settings_premium.h"
 #include "ui/chat/chats_filter_tag.h"
 #include "ui/controls/emoji_button_factory.h"
 #include "ui/controls/emoji_button.h"
@@ -806,7 +807,9 @@ void EditFilterBox(
 				session->data().chatsFilters().tagsEnabledValue(),
 				Data::AmPremiumValue(session)
 			) | rpl::map([=] (bool possible, bool tagsEnabled, bool premium) {
-				return possible && (tagsEnabled || !premium);
+				return possible
+					&& (premium || Settings::PremiumPromotionAllowed())
+					&& (tagsEnabled || !premium);
 			}),
 			anim::type::instant);
 

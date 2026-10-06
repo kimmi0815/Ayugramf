@@ -1472,6 +1472,10 @@ void SessionNavigation::showByInitialId(
 void SessionNavigation::showSettings(
 		Settings::Type type,
 		const SectionShow &params) {
+	if (type == Settings::PremiumId()
+		&& !Settings::PremiumPromotionAllowed()) {
+		return;
+	}
 	showSection(
 		std::make_shared<Info::Memento>(
 			Info::Settings::Tag{ _session->user() },
@@ -1787,7 +1791,7 @@ SessionController::SessionController(
 }
 
 bool SessionController::skipNonPremiumLimitToast(bool download) const {
-	if (session().premium()) {
+	if (!Settings::PremiumPromotionAllowed() || session().premium()) {
 		return true;
 	}
 	const auto now = base::unixtime::now();

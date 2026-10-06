@@ -18,6 +18,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
 #include "menu/menu_sponsored.h"
+#include "settings/sections/settings_premium.h"
 #include "ui/effects/numbers_animation.h"
 #include "ui/effects/ripple_animation.h"
 #include "ui/widgets/menu/menu_add_action_callback.h"
@@ -117,7 +118,11 @@ Close::Close(
 	updateProgress(_startedAt);
 
 	setClickedCallback([=] {
-		_actions.fire(_allowClose ? Action::Close : Action::PromotePremium);
+		if (_allowClose) {
+			_actions.fire(Action::Close);
+		} else if (Settings::PremiumPromotionAllowed()) {
+			_actions.fire(Action::PromotePremium);
+		}
 	});
 }
 

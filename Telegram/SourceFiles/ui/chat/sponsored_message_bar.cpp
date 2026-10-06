@@ -16,6 +16,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
 #include "menu/menu_sponsored.h"
+#include "settings/sections/settings_premium.h"
 #include "ui/chat/chat_style.h"
 #include "ui/chat/chat_theme.h"
 #include "ui/dynamic_image.h"
@@ -245,7 +246,9 @@ void FillSponsoredMessageBar(
 		state->rightPhoto->subscribeToUpdates(callback);
 		callback();
 	}
-	const auto rightHide = hasRightPhoto
+	const auto canHide = session->premium()
+		|| Settings::PremiumPromotionAllowed();
+	const auto rightHide = (hasRightPhoto || !canHide)
 		? nullptr
 		: Ui::CreateChild<Ui::IconButton>(
 			container,
@@ -271,7 +274,7 @@ void FillSponsoredMessageBar(
 		hostedClick(from.canReport
 			? AboutSponsoredClickHandler()
 			: HideSponsoredClickHandler()));
-	badgeButton->show();
+	badgeButton->setVisible(from.canReport || canHide);
 
 	const auto draw = [=](QPainter &p) {
 		const auto r = widget->rect();

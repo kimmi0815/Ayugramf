@@ -3585,7 +3585,9 @@ void SetupRestrictionView(
 				show,
 				peer,
 				lifting);
-		} else if (value.type == Type::Rights) {
+		} else if (value.type == Type::Rights
+			|| (value.type == Type::PremiumRequired
+				&& !Settings::PremiumPromotionAllowed())) {
 			state->icon = nullptr;
 			state->unlock = nullptr;
 			state->button = nullptr;

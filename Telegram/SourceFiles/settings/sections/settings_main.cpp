@@ -539,15 +539,17 @@ void BuildPremiumSection(SectionBuilder &builder) {
 	builder.addDivider();
 	builder.addSkip();
 
-	builder.addPremiumButton({
-		.id = u"main/premium"_q,
-		.title = tr::lng_premium_summary_title(),
-		.onClick = [=] {
-			controller->setPremiumRef("settings");
-			showOther(PremiumId());
-		},
-		.keywords = { u"subscription"_q },
-	});
+	if (PremiumPromotionAllowed()) {
+		builder.addPremiumButton({
+			.id = u"main/premium"_q,
+			.title = tr::lng_premium_summary_title(),
+			.onClick = [=] {
+				controller->setPremiumRef("settings");
+				showOther(PremiumId());
+			},
+			.keywords = { u"subscription"_q },
+		});
+	}
 
 	session->credits().load();
 	builder.addPremiumButton({
@@ -593,7 +595,7 @@ void BuildPremiumSection(SectionBuilder &builder) {
 		.keywords = { u"work"_q, u"company"_q },
 	});
 
-	if (session->premiumCanBuy()) {
+	if (PremiumPromotionAllowed() && session->premiumCanBuy()) {
 		builder.addButton({
 			.id = u"main/send-gift"_q,
 			.title = tr::lng_settings_gift_premium(),

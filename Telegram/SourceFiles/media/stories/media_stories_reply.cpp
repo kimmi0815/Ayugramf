@@ -48,6 +48,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "menu/menu_send.h"
 #include "payments/ui/payments_reaction_box.h" // MaxTopPaidDonorsShown
 #include "settings/settings_credits_graphics.h" // DarkCreditsEntryBoxStyle
+#include "settings/sections/settings_premium.h"
 #include "storage/localimageloader.h"
 #include "storage/storage_account.h"
 #include "storage/storage_media_prepare.h"
@@ -889,7 +890,9 @@ void ReplyArea::show(
 				? WriteRestriction()
 				: WriteRestriction{
 					.text = tr::lng_send_non_premium_story(tr::now),
-					.button = tr::lng_send_non_premium_unlock(tr::now),
+					.button = Settings::PremiumPromotionAllowed()
+						? tr::lng_send_non_premium_unlock(tr::now)
+						: QString(),
 					.type = WriteRestrictionType::PremiumRequired,
 				};
 		});

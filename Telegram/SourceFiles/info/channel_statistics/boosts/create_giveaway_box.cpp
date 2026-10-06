@@ -387,7 +387,7 @@ void CreateGiveawayBox(
 				QImage())
 		)->setAttribute(Qt::WA_TransparentForMouseEvents);
 	}
-	if (!prepaid) {
+	if (!prepaid && Settings::PremiumPromotionAllowed()) {
 		const auto row = contentWrap->entity()->add(
 			object_ptr<Giveaway::GiveawayTypeRow>(
 				box,
@@ -1386,6 +1386,11 @@ void CreateGiveawayBox(
 				return;
 			}
 			const auto type = typeGroup->current();
+			if (!prepaid
+				&& !Settings::PremiumPromotionAllowed()
+				&& type != GiveawayType::Credits) {
+				return;
+			}
 			const auto isSpecific = isSpecificUsers();
 			const auto isRandom = (type == GiveawayType::Random);
 			const auto isCredits = (type == GiveawayType::Credits);
@@ -1535,7 +1540,9 @@ void CreateGiveawayBox(
 		});
 		box->addButton(std::move(button));
 	}
-	state->typeValue.force_assign(GiveawayType::Random);
+	state->typeValue.force_assign((prepaid || Settings::PremiumPromotionAllowed())
+		? GiveawayType::Random
+		: GiveawayType::Credits);
 
 	std::move(
 		showFinished

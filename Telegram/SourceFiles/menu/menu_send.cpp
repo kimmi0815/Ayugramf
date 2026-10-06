@@ -283,10 +283,12 @@ EffectPreview::EffectPreview(
 		this,
 		object_ptr<Ui::FlatLabel>(
 			this,
-			tr::lng_effect_premium(
+			Settings::PremiumPromotionAllowed()
+				? tr::lng_effect_premium(
 				lt_link,
 				tr::lng_effect_premium_link(tr::link),
-				tr::marked),
+				tr::marked)
+				: tr::lng_cant_do_this(tr::marked),
 			st::effectPreviewPromoLabel),
 		st::effectPreviewPromoPadding))
 , _bottom(_send ? ((Ui::RpWidget*)_send.get()) : _premiumPromoLabel.get())
@@ -529,7 +531,7 @@ void EffectPreview::setupSend(Details details) {
 		SetupMenuAndShortcuts(_send.get(), _show, [=] {
 			return Details{ .type = type };
 		}, _actionWithEffect);
-	} else {
+	} else if (Settings::PremiumPromotionAllowed()) {
 		_premiumPromoLabel->entity()->setClickHandlerFilter([=](auto&&...) {
 			const auto window = _show->resolveWindow();
 			if (window) {

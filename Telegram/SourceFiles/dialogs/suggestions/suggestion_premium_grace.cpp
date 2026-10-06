@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "dialogs/ui/dialogs_top_bar_suggestion_content.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
+#include "settings/sections/settings_premium.h"
 #include "ui/text/text_utilities.h"
 #include "window/window_session_controller.h"
 
@@ -22,7 +23,8 @@ constexpr auto kSugPremiumGrace = "PREMIUM_GRACE"_cs;
 
 bool Available(const Context &context) {
 	const auto session = context.session.get();
-	return session->premiumCanBuy()
+	return Settings::PremiumPromotionAllowed()
+		&& session->premiumCanBuy()
 		&& session->promoSuggestions().current(kSugPremiumGrace.utf8());
 }
 

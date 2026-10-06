@@ -983,7 +983,11 @@ void StickerSetBox::updateButtons() {
 			}
 		};
 		if (_inner->notInstalled()) {
-			if (!_session->premium()
+			if (!Settings::PremiumPromotionAllowed()
+				&& !_session->premium()
+				&& _inner->premiumEmojiSet()) {
+				addButton(tr::lng_close(), [=] { closeBox(); });
+			} else if (!_session->premium()
 				&& _session->premiumPossible()
 				&& _inner->premiumEmojiSet()) {
 				const auto &st = st::premiumPreviewDoubledLimitsBox;

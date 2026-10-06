@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "payments/payments_form.h"
 #include "payments/ui/payments_panel.h"
+#include "main/main_app_config.h"
 #include "main/main_session.h"
 #include "main/main_account.h"
 #include "storage/storage_account.h"
@@ -23,6 +24,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "apiwrap.h"
 #include "api/api_cloud_password.h"
+#include "settings/sections/settings_premium.h"
 #include "webview/webview_dialog.h"
 #include "window/themes/window_theme.h"
 
@@ -106,6 +108,17 @@ void CheckoutProcess::Start(
 		const QString &slug,
 		Fn<void(CheckoutResult)> reactivate,
 		Fn<void(NonPanelPaymentForm)> nonPanelPaymentFormProcess) {
+	const auto premiumSlug = session->appConfig().get<QString>(
+		u"premium_invoice_slug"_q,
+		QString());
+	if (!Settings::PremiumPromotionAllowed()
+		&& !premiumSlug.isEmpty()
+		&& slug == premiumSlug) {
+		if (reactivate) {
+			reactivate(CheckoutResult::Cancelled);
+		}
+		return;
+	}
 	auto &processes = LookupSessionProcesses(session);
 	const auto i = processes.bySlug.find(slug);
 	if (i != end(processes.bySlug)) {
@@ -130,6 +143,13 @@ void CheckoutProcess::Start(
 		InvoicePremiumGiftCode giftCodeInvoice,
 		Fn<void(CheckoutResult)> reactivate,
 		Fn<void(NonPanelPaymentForm)> nonPanelPaymentFormProcess) {
+	if (!Settings::PremiumPromotionAllowed()
+		&& !giftCodeInvoice.giveawayCredits) {
+		if (reactivate) {
+			reactivate(CheckoutResult::Cancelled);
+		}
+		return;
+	}
 	const auto randomId = giftCodeInvoice.randomId;
 	auto id = InvoiceId{ std::move(giftCodeInvoice) };
 	auto &processes = LookupSessionProcesses(SessionFromId(id));

@@ -4457,6 +4457,9 @@ std::shared_ptr<ChatHelpers::Show> ActiveWindowShow(
 void ShowRichMessagesPremiumToast(std::shared_ptr<ChatHelpers::Show> show) {
 	if (!show) {
 		return;
+	} else if (!Settings::PremiumPromotionAllowed()) {
+		show->showToast(tr::lng_cant_do_this(tr::now));
+		return;
 	}
 	const auto session = &show->session();
 	show->showToast({
@@ -4594,17 +4597,20 @@ void OfferRichMessagePremiumChoice(
 		Ui::AddSkip(box->verticalLayout());
 		Ui::AddSkip(box->verticalLayout());
 		Ui::AddSkip(box->verticalLayout());
-		const auto subscribe = box->addRow(
-			object_ptr<Ui::RoundButton>(
-				box,
-				tr::lng_posts_subscribe(),
-				st::defaultActiveButton),
-			st::boxRowPadding,
-			style::al_justify);
-		subscribe->setClickedCallback([=] {
-			box->closeBox();
-			Settings::ShowPremium(session, u"rich_message"_q);
-		});
+		auto subscribe = (Ui::RoundButton*)nullptr;
+		if (Settings::PremiumPromotionAllowed()) {
+			subscribe = box->addRow(
+				object_ptr<Ui::RoundButton>(
+					box,
+					tr::lng_posts_subscribe(),
+					st::defaultActiveButton),
+				st::boxRowPadding,
+				style::al_justify);
+			subscribe->setClickedCallback([=] {
+				box->closeBox();
+				Settings::ShowPremium(session, u"rich_message"_q);
+			});
+		}
 		Ui::AddSkip(box->verticalLayout());
 		const auto plain = box->addRow(
 			object_ptr<Ui::RoundButton>(
@@ -4632,8 +4638,11 @@ void OfferRichMessagePremiumChoice(
 		cancel->setClickedCallback([=] {
 			box->closeBox();
 		});
-		for (const auto &button : { subscribe, plain, cancel }) {
+		for (const auto button : { plain, cancel }) {
 			button->setFullRadius(true);
+		}
+		if (subscribe) {
+			subscribe->setFullRadius(true);
 		}
 		Ui::AddSkip(
 			box->verticalLayout(),

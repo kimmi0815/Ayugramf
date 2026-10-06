@@ -38,7 +38,9 @@ constexpr auto kSugPremiumRestore = "PREMIUM_RESTORE"_cs;
 
 bool Available(const Context &context) {
 	const auto session = context.session.get();
-	if (!session->premiumPossible() || session->premium()) {
+	if (!Settings::PremiumPromotionAllowed()
+		|| !session->premiumPossible()
+		|| session->premium()) {
 		return false;
 	}
 	return !CurrentPremiumKey(&session->promoSuggestions()).isEmpty();

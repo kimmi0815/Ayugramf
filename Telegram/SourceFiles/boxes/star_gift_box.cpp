@@ -794,6 +794,9 @@ void PreviewWrap::paintEvent(QPaintEvent *e) {
 [[nodiscard]] rpl::producer<PremiumGiftsDescriptor> GiftsPremium(
 		not_null<Main::Session*> session,
 		not_null<PeerData*> peer) {
+	if (!Settings::PremiumPromotionAllowed()) {
+		return rpl::single(PremiumGiftsDescriptor());
+	}
 	struct Session {
 		PremiumGiftsDescriptor last;
 	};
@@ -1800,7 +1803,8 @@ void GiftBox(
 	const auto disallowedTypes = user
 		? user->disallowedGiftTypes()
 		: Type::Premium;
-	const auto premiumDisallowed = peer->isSelf()
+	const auto premiumDisallowed = !Settings::PremiumPromotionAllowed()
+		|| peer->isSelf()
 		|| (disallowedTypes & Type::Premium);
 	const auto limitedDisallowed = !peer->isSelf()
 		&& (disallowedTypes & Type::Limited);
@@ -2351,7 +2355,9 @@ void ChooseStarGiftRecipient(
 			});
 		const auto controllerRaw = controller.get();
 		auto initBox = [=](not_null<PeerListBox*> box) {
-			box->setTitle(tr::lng_gift_premium_or_stars());
+			box->setTitle(Settings::PremiumPromotionAllowed()
+				? tr::lng_gift_premium_or_stars()
+				: tr::lng_gift_send_title());
 			box->addButton(tr::lng_cancel(), [=] { box->closeBox(); });
 
 			box->noSearchSubmits() | rpl::on_next([=] {
@@ -2436,7 +2442,7 @@ void ShowStarGiftBox(
 	};
 
 	const auto user = peer->asUser();
-	if (user && !user->isSelf()) {
+	if (Settings::PremiumPromotionAllowed() && user && !user->isSelf()) {
 		GiftsPremium(
 			session,
 			peer

@@ -8,17 +8,27 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "dialogs/suggestions/suggestion.h"
 
 #include "core/click_handler_types.h"
+#include "core/local_url_handlers.h"
 #include "core/ui_integration.h"
 #include "data/components/promo_suggestions.h"
 #include "dialogs/ui/dialogs_top_bar_suggestion_content.h"
 #include "main/main_session.h"
+#include "settings/sections/settings_premium.h"
 #include "window/window_session_controller.h"
 
 namespace Dialogs::TopBarSuggestions {
 namespace {
 
 bool Available(const Context &context) {
-	return context.session->promoSuggestions().custom().has_value();
+	const auto custom = context.session->promoSuggestions().custom();
+	if (!custom) {
+		return false;
+	} else if (Settings::PremiumPromotionAllowed()) {
+		return true;
+	}
+	const auto url = Core::TryConvertUrlToLocal(custom->url);
+	return !custom->suggestion.startsWith(u"PREMIUM"_q)
+		&& !url.startsWith(u"tg://premium"_q);
 }
 
 void Activate(ActivateArgs args) {

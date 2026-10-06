@@ -720,7 +720,10 @@ void BackgroundPreviewBox::applyForPeer() {
 	if (forChannel()) {
 		checkLevelForChannel();
 		return;
-	} else if (_fromMessageId || !_forPeer->session().premiumPossible()) {
+	} else if (_fromMessageId
+		|| !_forPeer->session().premiumPossible()
+		|| (!_forPeer->session().premium()
+			&& !::Settings::PremiumPromotionAllowed())) {
 		applyForPeer(false);
 		return;
 	} else if (_forBothOverlay) {

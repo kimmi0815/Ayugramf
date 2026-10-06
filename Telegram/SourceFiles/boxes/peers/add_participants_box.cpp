@@ -242,6 +242,13 @@ void SimpleForbiddenBox(
 		not_null<Ui::GenericBox*> box,
 		not_null<PeerData*> peer,
 		const ForbiddenInvites &forbidden) {
+	if (!Settings::PremiumPromotionAllowed()) {
+		Ui::ConfirmBox(box, {
+			.text = tr::lng_cant_do_this(tr::now),
+			.inform = true,
+		});
+		return;
+	}
 	box->setTitle(tr::lng_invite_upgrade_title());
 	box->setWidth(st::boxWideWidth);
 	box->addTopButton(st::boxTitleClose, [=] {
@@ -579,7 +586,8 @@ void InviteForbiddenController::prepare() {
 		}
 	}, lifetime());
 
-	if (session().premium()
+	if (!Settings::PremiumPromotionAllowed()
+		|| session().premium()
 		|| (_forbidden.premiumAllowsInvite.empty()
 			&& _forbidden.premiumAllowsWrite.empty())) {
 		setSimpleCover();

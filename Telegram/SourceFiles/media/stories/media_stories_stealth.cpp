@@ -388,6 +388,11 @@ void AddStealthModeMenu(
 	}
 	const auto now = base::unixtime::now();
 	const auto stealth = peer->owner().stories().stealthMode();
+	if (!peer->session().premium()
+		&& (stealth.enabledTill <= now)
+		&& !Settings::PremiumPromotionAllowed()) {
+		return;
+	}
 	add(
 		tr::lng_stories_view_anonymously(tr::now),
 		[=] {

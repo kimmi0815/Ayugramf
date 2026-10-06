@@ -1474,6 +1474,9 @@ bool ResolvePremiumOffer(
 		Window::SessionController *controller,
 		const Match &match,
 		const QVariant &context) {
+	if (!::Settings::PremiumPromotionAllowed()) {
+		return true;
+	}
 	if (!controller) {
 		return false;
 	}
@@ -1492,6 +1495,9 @@ bool ResolvePremiumMultigift(
 		Window::SessionController *controller,
 		const Match &match,
 		const QVariant &context) {
+	if (!::Settings::PremiumPromotionAllowed()) {
+		return true;
+	}
 	if (!controller) {
 		return false;
 	}

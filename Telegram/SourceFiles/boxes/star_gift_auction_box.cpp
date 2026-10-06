@@ -38,6 +38,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "payments/ui/payments_reaction_box.h"
 #include "payments/payments_checkout_process.h"
 #include "settings/settings_credits_graphics.h"
+#include "settings/sections/settings_premium.h"
 #include "storage/storage_account.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/boxes/emoji_stake_box.h" // AddStarsInputField
@@ -1353,14 +1354,18 @@ void AuctionInfoBox(
 		state->attributes.value());
 	AddUniqueGiftCover(container, std::move(gift), {
 		.pretitle = started ? nullptr : tr::lng_auction_preview_name(),
-		.subtitle = tr::lng_auction_preview_learn_gifts(
-			lt_arrow,
-			rpl::single(Text::IconEmoji(&st::textMoreIconEmoji)),
-			tr::link),
-		.subtitleClick = [=] {
-			ShowPremiumPreviewBox(window, PremiumFeature::Gifts);
-		},
-		.subtitleLinkColored = true,
+		.subtitle = Settings::PremiumPromotionAllowed()
+			? tr::lng_auction_preview_learn_gifts(
+				lt_arrow,
+				rpl::single(Text::IconEmoji(&st::textMoreIconEmoji)),
+				tr::link)
+			: rpl::single(tr::marked()),
+		.subtitleClick = Settings::PremiumPromotionAllowed()
+			? Fn<void()>([=] {
+				ShowPremiumPreviewBox(window, PremiumFeature::Gifts);
+			})
+			: nullptr,
+		.subtitleLinkColored = Settings::PremiumPromotionAllowed(),
 	});
 	AddSkip(container, st::defaultVerticalListSkip * 2);
 

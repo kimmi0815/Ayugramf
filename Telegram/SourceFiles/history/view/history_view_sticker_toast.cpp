@@ -62,7 +62,9 @@ void StickerToast::showFor(
 		not_null<DocumentData*> document,
 		Section section) {
 	const auto sticker = document->sticker();
-	if (!sticker || !document->session().premiumPossible()) {
+	if (!Settings::PremiumPromotionAllowed()
+		|| !sticker
+		|| !document->session().premiumPossible()) {
 		return;
 	} else if (const auto strong = _weak.get()) {
 		if (_for == document) {

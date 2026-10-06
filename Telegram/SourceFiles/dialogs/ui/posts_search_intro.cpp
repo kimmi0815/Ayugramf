@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/timer_rpl.h"
 #include "base/unixtime.h"
 #include "lang/lang_keys.h"
+#include "settings/sections/settings_premium.h"
 #include "ui/controls/button_labels.h"
 #include "ui/text/text_utilities.h"
 #include "ui/widgets/buttons.h"
@@ -155,7 +156,9 @@ void PostsSearchIntro::setup() {
 	) | rpl::map([](const PostsSearchIntroState &state)
 	-> rpl::producer<QString> {
 		if (state.needsPremium) {
-			return tr::lng_posts_need_subscribe();
+			return Settings::PremiumPromotionAllowed()
+				? tr::lng_posts_need_subscribe()
+				: tr::lng_cant_do_this();
 		} else if (state.freeSearchesLeft > 0) {
 			return tr::lng_posts_remaining(
 				lt_count,
@@ -198,11 +201,14 @@ void PostsSearchIntro::setup() {
 
 	_state.value(
 	) | rpl::on_next([=](const PostsSearchIntroState &state) {
-		if (state.query.trimmed().isEmpty() && !state.needsPremium) {
+		if ((state.query.trimmed().isEmpty() && !state.needsPremium)
+			|| (state.needsPremium && !Settings::PremiumPromotionAllowed())) {
+			_button->setDisabled(state.needsPremium);
 			_button->resize(_button->width(), 0);
 			_content->resizeToWidth(width());
 			return;
 		}
+		_button->setDisabled(false);
 
 		auto copy = _button->children();
 		for (const auto child : copy) {

@@ -80,7 +80,7 @@ void MaybeShowPremiumToast(
 		std::shared_ptr<ChatHelpers::Show> show,
 		TextWithEntities text,
 		const QString &ref) {
-	if (!show) {
+	if (!Settings::PremiumPromotionAllowed() || !show) {
 		return;
 	}
 	const auto session = &show->session();

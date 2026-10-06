@@ -19,6 +19,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/reactions/history_view_reactions.h"
 #include "main/main_session.h"
 #include "lang/lang_keys.h"
+#include "settings/sections/settings_premium.h"
 #include "ui/effects/animation_value.h"
 #include "ui/text/text_utilities.h"
 #include "ui/painter.h"
@@ -119,6 +120,13 @@ void SearchTags::fill(
 		bool premium) {
 	const auto selected = collectSelected();
 	_tags.clear();
+	if (!premium && !Settings::PremiumPromotionAllowed()) {
+		if (_width > 0) {
+			layout();
+			_repaintRequests.fire({});
+		}
+		return;
+	}
 	_tags.reserve(list.size());
 	const auto link = [&](Data::ReactionId id) {
 		return std::make_shared<GenericClickHandler>(crl::guard(this, [=](
@@ -160,7 +168,7 @@ void SearchTags::fill(
 			_owner->reactions().preloadReactionImageFor(id);
 		}
 	};
-	if (!premium) {
+	if (!premium && Settings::PremiumPromotionAllowed()) {
 		const auto text = (list.empty() && _added.empty())
 			? tr::lng_add_tag_button(tr::now)
 			: tr::lng_unlock_tags(tr::now);

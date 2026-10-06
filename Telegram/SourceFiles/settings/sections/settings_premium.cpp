@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "settings/sections/settings_premium.h"
 
+#include "boxes/gift_premium_box.h"
 #include "boxes/premium_preview_box.h"
 #include "boxes/sticker_set_box.h"
 #include "chat_helpers/stickers_lottie.h" // LottiePlayerFromDocument.
@@ -1307,6 +1308,9 @@ void AddSummaryPremium(
 void BuildPremiumSectionContent(
 		SectionBuilder &builder,
 		std::shared_ptr<PremiumState> state) {
+	if (!PremiumPromotionAllowed()) {
+		return;
+	}
 	const auto controller = builder.controller();
 
 	if (controller && state) {
@@ -1676,6 +1680,9 @@ void Premium::showFinished() {
 
 base::weak_qptr<Ui::RpWidget> Premium::createPinnedToBottom(
 		not_null<Ui::RpWidget*> parent) {
+	if (!PremiumPromotionAllowed()) {
+		return nullptr;
+	}
 	const auto content = Ui::CreateChild<Ui::RpWidget>(parent.get());
 
 	if (Ref::Gift::Parse(_state->ref)) {
@@ -1782,7 +1789,7 @@ base::weak_qptr<Ui::RpWidget> Premium::createPinnedToBottom(
 
 const auto kMeta = BuildHelper({
 	.id = Premium::Id(),
-	.parentId = MainId(),
+	.parentId = PremiumPromotionAllowed() ? MainId() : Type(),
 	.title = &tr::lng_premium_summary_title,
 	.icon = &st::menuIconPremium,
 }, [](SectionBuilder &builder) {
@@ -1816,6 +1823,9 @@ Type PremiumId() {
 }
 
 void ShowPremium(not_null<::Main::Session*> session, const QString &ref) {
+	if (!PremiumPromotionAllowed()) {
+		return;
+	}
 	const auto active = Core::App().activeWindow();
 	const auto controller = (active && active->isPrimary())
 		? active->sessionController()
@@ -1834,6 +1844,9 @@ void ShowPremium(not_null<::Main::Session*> session, const QString &ref) {
 void ShowPremium(
 		not_null<Window::SessionController*> controller,
 		const QString &ref) {
+	if (!PremiumPromotionAllowed()) {
+		return;
+	}
 	controller->window().activate();
 	if (!controller->session().premiumPossible()) {
 		controller->show(Box(PremiumUnavailableBox));
@@ -1848,6 +1861,20 @@ void ShowGiftPremium(
 		not_null<PeerData*> peer,
 		int days,
 		bool me) {
+	if (!PremiumPromotionAllowed()) {
+		controller->show(Box([](not_null<Ui::GenericBox*> box, int days) {
+			box->setTitle(tr::lng_gift_premium_title());
+			box->addRow(object_ptr<Ui::FlatLabel>(
+				box,
+				tr::lng_gift_link_gift_premium(
+					lt_duration,
+					GiftDurationValue(days) | rpl::map(tr::marked),
+					tr::marked),
+				st::defaultFlatLabel));
+			box->addButton(tr::lng_close(), [=] { box->closeBox(); });
+		}, days));
+		return;
+	}
 	ShowPremium(controller, Ref::Gift::Serialize({ peer->id, days, me }));
 }
 
@@ -1873,6 +1900,9 @@ void ShowPremiumGiftPremium(
 void StartPremiumPayment(
 		not_null<Window::SessionController*> controller,
 		const QString &ref) {
+	if (!PremiumPromotionAllowed()) {
+		return;
+	}
 	const auto session = &controller->session();
 	const auto username = session->appConfig().get<QString>(
 		u"premium_bot_username"_q,
@@ -1919,6 +1949,9 @@ void ShowPremiumPromoToast(
 			not_null<::Main::Session*>)> resolveWindow,
 		TextWithEntities textWithLink,
 		const QString &ref) {
+	if (!PremiumPromotionAllowed()) {
+		return;
+	}
 	using WeakToast = base::weak_ptr<Ui::Toast::Instance>;
 	const auto toast = std::make_shared<WeakToast>();
 	(*toast) = show->showToast({
@@ -2033,6 +2066,11 @@ not_null<Ui::GradientButton*> CreateSubscribeButton(
 		args.gradientStops
 			? base::take(*args.gradientStops)
 			: Ui::Premium::ButtonGradientStops());
+	if (!PremiumPromotionAllowed()) {
+		result->setDisabled(true);
+		result->hide();
+		return result;
+	}
 
 	result->setClickedCallback([
 			show,
@@ -2040,6 +2078,9 @@ not_null<Ui::GradientButton*> CreateSubscribeButton(
 			promo = args.showPromo,
 			computeRef = args.computeRef,
 			computeBotUrl = args.computeBotUrl] {
+		if (!PremiumPromotionAllowed()) {
+			return;
+		}
 		const auto window = resolveWindow(
 			&show->session());
 		if (!window) {

@@ -291,6 +291,11 @@ void AddBusinessSummary(
 			"business_promo_order",
 			FallbackOrder());
 		const auto processEntry = [&](Entry &entry) {
+			if (!session->premium()
+				&& !PremiumPromotionAllowed()
+				&& entry.feature != PremiumFeature::BusinessBots) {
+				return;
+			}
 			icons.push_back(entry.icon);
 			addRow(entry);
 		};
@@ -306,7 +311,9 @@ void AddBusinessSummary(
 
 	content->resizeToWidth(content->height());
 
-	Assert(iconContainers.size() > 2);
+	if (iconContainers.empty()) {
+		return;
+	}
 	const auto from = iconContainers.front()->y();
 	const auto to = iconContainers.back()->y() + iconSize.height();
 	auto gradient = QLinearGradient(0, 0, 0, to - from);
@@ -392,6 +399,11 @@ void BuildBusinessFeatures(SectionBuilder &builder) {
 			continue;
 		}
 		const auto feature = it->second.feature;
+		if (!session->premium()
+			&& !PremiumPromotionAllowed()
+			&& feature != PremiumFeature::BusinessBots) {
+			continue;
+		}
 		const auto id = FeatureSearchId(feature);
 		if (id.isEmpty()) {
 			continue;
@@ -685,7 +697,7 @@ Business::Business(
 }
 
 rpl::producer<QString> Business::title() {
-	return tr::lng_premium_summary_title();
+	return tr::lng_business_title();
 }
 
 bool Business::hasFlexibleTopBar() const {
@@ -778,6 +790,9 @@ base::weak_qptr<Ui::RpWidget> Business::createPinnedToTop(
 		not_null<QWidget*> parent) {
 	auto title = tr::lng_business_title();
 	auto about = [&]() -> rpl::producer<TextWithEntities> {
+		if (!controller()->session().premium() && !PremiumPromotionAllowed()) {
+			return rpl::single(tr::marked());
+		}
 		return rpl::conditional(
 			Data::AmPremiumValue(&controller()->session()),
 			tr::lng_business_unlocked(tr::marked),
@@ -887,6 +902,9 @@ void Business::showFinished() {
 
 base::weak_qptr<Ui::RpWidget> Business::createPinnedToBottom(
 		not_null<Ui::RpWidget*> parent) {
+	if (!PremiumPromotionAllowed()) {
+		return nullptr;
+	}
 	const auto content = Ui::CreateChild<Ui::RpWidget>(parent.get());
 
 	const auto session = &controller()->session();

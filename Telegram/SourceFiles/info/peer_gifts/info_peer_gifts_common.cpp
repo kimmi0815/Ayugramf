@@ -27,6 +27,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session.h"
 #include "overview/overview_checkbox.h"
 #include "settings/settings_credits_graphics.h"
+#include "settings/sections/settings_premium.h"
 #include "ui/layers/generic_box.h"
 #include "ui/text/format_values.h"
 #include "ui/text/text_utilities.h"
@@ -114,7 +115,12 @@ rpl::producer<std::vector<GiftTypeStars>> GiftsStars(
 
 	const auto filtered = [=](std::vector<GiftTypeStars> list) {
 		list.erase(ranges::remove_if(list, [&](const GiftTypeStars &gift) {
-			return !AllowedToSend(gift, peer);
+			return !AllowedToSend(gift, peer)
+				|| (gift.info.requirePremium
+					&& !gift.resale
+					&& !gift.info.unique
+					&& !session->premium()
+					&& !Settings::PremiumPromotionAllowed());
 		}), end(list));
 		return list;
 	};

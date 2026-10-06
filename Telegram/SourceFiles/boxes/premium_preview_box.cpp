@@ -1438,6 +1438,7 @@ void ShowStickerPreviewBox(
 	Show(std::move(show), Descriptor{
 		.section = PremiumFeature::Stickers,
 		.requestedSticker = document,
+		.hideSubscriptionButton = !Settings::PremiumPromotionAllowed(),
 	});
 }
 
@@ -1453,6 +1454,9 @@ void ShowPremiumPreviewBox(
 		PremiumFeature section,
 		Fn<void(not_null<Ui::BoxContent*>)> shown,
 		bool hideSubscriptionButton) {
+	if (!Settings::PremiumPromotionAllowed()) {
+		return;
+	}
 	Show(std::move(show), Descriptor{
 		.section = section,
 		.shownCallback = std::move(shown),
@@ -1474,6 +1478,12 @@ void ShowPremiumPreviewToBuy(
 		std::shared_ptr<ChatHelpers::Show> show,
 		PremiumFeature section,
 		Fn<void()> hiddenCallback) {
+	if (!Settings::PremiumPromotionAllowed()) {
+		if (hiddenCallback) {
+			hiddenCallback();
+		}
+		return;
+	}
 	Show(std::move(show), Descriptor{
 		.section = section,
 		.fromSettings = true,

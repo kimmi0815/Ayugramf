@@ -3222,6 +3222,9 @@ QRect EmojiListWidget::addButtonRect(int index) const {
 }
 
 bool EmojiListWidget::hasUnlockButton(int index) const {
+	if (!Settings::PremiumPromotionAllowed()) {
+		return false;
+	}
 	if (_searchMode) {
 		if (index > 0 && index <= int(_searchSets.size())) {
 			return searchSetBySection(index).premiumRequired;
@@ -3248,7 +3251,9 @@ QRect EmojiListWidget::unlockButtonRect(int index) const {
 
 bool EmojiListWidget::hasButton(int index) const {
 	if (_searchMode) {
-		return (index > 0 && index <= int(_searchSets.size()));
+		return (index > 0 && index <= int(_searchSets.size()))
+			&& (Settings::PremiumPromotionAllowed()
+				|| !searchSetBySection(index).premiumRequired);
 	}
 	if (hasColorButton(index)) {
 		return true;
@@ -3256,6 +3261,7 @@ bool EmojiListWidget::hasButton(int index) const {
 		&& index < _staticCount + _custom.size()) {
 		const auto &custom = _custom[index - _staticCount];
 		return (custom.id != Data::Stickers::CollectibleSetId)
+			&& (Settings::PremiumPromotionAllowed() || !custom.premiumRequired)
 			&& ((custom.id != Data::Stickers::MegagroupSetId)
 				|| custom.canRemove);
 	}

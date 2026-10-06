@@ -1107,6 +1107,10 @@ void EditMessagesPrivacyBox(
 	using WeakToast = base::weak_ptr<Ui::Toast::Instance>;
 	const auto toast = std::make_shared<WeakToast>();
 	const auto showToast = [=] {
+		if (!Settings::PremiumPromotionAllowed()) {
+			controller->showToast(tr::lng_cant_do_this(tr::now));
+			return;
+		}
 		auto link = tr::link(
 			tr::semibold(
 				tr::lng_messages_privacy_premium_link(tr::now)));
@@ -1147,19 +1151,21 @@ void EditMessagesPrivacyBox(
 			}
 		});
 
-		Ui::AddSkip(inner);
-		Settings::AddButtonWithIcon(
-			inner,
-			tr::lng_messages_privacy_premium_button(),
-			st::messagePrivacySubscribe,
-			{ .icon = &st::menuBlueIconPremium }
-		)->setClickedCallback([=] {
-			Settings::ShowPremium(
-				controller,
-				u"noncontact_peers_require_premium"_q);
-		});
-		Ui::AddSkip(inner);
-		Ui::AddDividerText(inner, tr::lng_messages_privacy_premium_about());
+		if (Settings::PremiumPromotionAllowed()) {
+			Ui::AddSkip(inner);
+			Settings::AddButtonWithIcon(
+				inner,
+				tr::lng_messages_privacy_premium_button(),
+				st::messagePrivacySubscribe,
+				{ .icon = &st::menuBlueIconPremium }
+			)->setClickedCallback([=] {
+				Settings::ShowPremium(
+					controller,
+					u"noncontact_peers_require_premium"_q);
+			});
+			Ui::AddSkip(inner);
+			Ui::AddDividerText(inner, tr::lng_messages_privacy_premium_about());
+		}
 		box->addButton(tr::lng_about_done(), [=] {
 			box->closeBox();
 		});

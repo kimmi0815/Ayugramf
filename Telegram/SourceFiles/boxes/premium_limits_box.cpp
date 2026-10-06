@@ -489,7 +489,7 @@ void SimpleLimitBox(
 		box,
 		stOverride,
 		session,
-		session->premiumPossible(),
+		Settings::PremiumPromotionAllowed() && session->premiumPossible(),
 		std::move(title),
 		std::move(text),
 		refAddition,
@@ -509,7 +509,8 @@ void SimplePinsLimitBox(
 		float64 premiumLimit,
 		float64 currentCount) {
 	const auto premium = session->premium();
-	const auto premiumPossible = session->premiumPossible();
+	const auto premiumPossible = Settings::PremiumPromotionAllowed()
+		&& session->premiumPossible();
 
 	const auto current = std::clamp(currentCount, defaultLimit, premiumLimit);
 
@@ -545,7 +546,8 @@ void ChannelsLimitBox(
 		not_null<Ui::GenericBox*> box,
 		not_null<Main::Session*> session) {
 	const auto premium = session->premium();
-	const auto premiumPossible = session->premiumPossible();
+	const auto premiumPossible = Settings::PremiumPromotionAllowed()
+		&& session->premiumPossible();
 
 	const auto limits = Data::PremiumLimits(session);
 	const auto defaultLimit = float64(limits.channelsDefault());
@@ -617,7 +619,7 @@ void ChannelsLimitBox(
 			box->addButton(
 				tr::lng_channels_leave(lt_count, rpl::single(count * 1.)),
 				[=] { leave(delegate->selected()); });
-		} else if (premium) {
+		} else if (premium || !Settings::PremiumPromotionAllowed()) {
 			box->addButton(tr::lng_box_ok(), [=] {
 				box->closeBox();
 			});
@@ -635,7 +637,8 @@ void PublicLinksLimitBox(
 		Fn<void()> retry) {
 	const auto session = &navigation->session();
 	const auto premium = session->premium();
-	const auto premiumPossible = session->premiumPossible();
+	const auto premiumPossible = Settings::PremiumPromotionAllowed()
+		&& session->premiumPossible();
 
 	const auto limits = Data::PremiumLimits(session);
 	const auto defaultLimit = float64(limits.channelsPublicDefault());
@@ -698,7 +701,8 @@ void FilterChatsLimitBox(
 		int currentCount,
 		bool include) {
 	const auto premium = session->premium();
-	const auto premiumPossible = session->premiumPossible();
+	const auto premiumPossible = Settings::PremiumPromotionAllowed()
+		&& session->premiumPossible();
 
 	const auto limits = Data::PremiumLimits(session);
 	const auto defaultLimit = float64(limits.dialogFiltersChatsDefault());
@@ -741,7 +745,8 @@ void FilterLinksLimitBox(
 		not_null<Ui::GenericBox*> box,
 		not_null<Main::Session*> session) {
 	const auto premium = session->premium();
-	const auto premiumPossible = session->premiumPossible();
+	const auto premiumPossible = Settings::PremiumPromotionAllowed()
+		&& session->premiumPossible();
 
 	const auto limits = Data::PremiumLimits(session);
 	const auto defaultLimit = float64(limits.dialogFiltersLinksDefault());
@@ -787,7 +792,8 @@ void FiltersLimitBox(
 		not_null<Main::Session*> session,
 		std::optional<int> filtersCountOverride) {
 	const auto premium = session->premium();
-	const auto premiumPossible = session->premiumPossible();
+	const auto premiumPossible = Settings::PremiumPromotionAllowed()
+		&& session->premiumPossible();
 
 	const auto limits = Data::PremiumLimits(session);
 	const auto defaultLimit = float64(limits.dialogFiltersDefault());
@@ -827,7 +833,8 @@ void ShareableFiltersLimitBox(
 		not_null<Ui::GenericBox*> box,
 		not_null<Main::Session*> session) {
 	const auto premium = session->premium();
-	const auto premiumPossible = session->premiumPossible();
+	const auto premiumPossible = Settings::PremiumPromotionAllowed()
+		&& session->premiumPossible();
 
 	const auto limits = Data::PremiumLimits(session);
 	const auto defaultLimit = float64(limits.dialogShareableFiltersDefault());
@@ -947,7 +954,8 @@ void CaptionLimitBox(
 		int remove,
 		const style::PremiumLimits *stOverride) {
 	const auto premium = session->premium();
-	const auto premiumPossible = session->premiumPossible();
+	const auto premiumPossible = Settings::PremiumPromotionAllowed()
+		&& session->premiumPossible();
 
 	const auto limits = Data::PremiumLimits(session);
 	const auto defaultLimit = float64(limits.captionLengthDefault());
@@ -1020,7 +1028,9 @@ void FileSizeLimitBox(
 
 	const auto tooLarge = (fileSizeBytes > premiumLimit * 512ULL * 1024);
 	const auto showLimit = tooLarge ? premiumGb : defaultGb;
-	const auto premiumPossible = !tooLarge && session->premiumPossible();
+	const auto premiumPossible = Settings::PremiumPromotionAllowed()
+		&& !tooLarge
+		&& session->premiumPossible();
 
 	const auto current = (fileSizeBytes && premiumPossible)
 		? std::clamp(
@@ -1075,7 +1085,8 @@ void AccountsLimitBox(
 	auto promotePossible = ranges::views::all(
 		accounts
 	) | ranges::views::filter([&](not_null<Main::Account*> account) {
-		return account->sessionExists()
+		return Settings::PremiumPromotionAllowed()
+			&& account->sessionExists()
 			&& !account->session().premium()
 			&& account->session().premiumPossible();
 	}) | ranges::views::transform([&](not_null<Main::Account*> account) {

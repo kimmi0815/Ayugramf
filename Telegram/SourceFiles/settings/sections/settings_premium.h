@@ -43,6 +43,10 @@ class SessionController;
 
 namespace Settings {
 
+[[nodiscard]] constexpr bool PremiumPromotionAllowed() {
+	return false;
+}
+
 [[nodiscard]] Type PremiumId();
 
 void ShowPremium(not_null<::Main::Session*> session, const QString &ref);

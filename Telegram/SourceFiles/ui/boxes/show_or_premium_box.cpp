@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/object_ptr.h"
 #include "lang/lang_keys.h"
 #include "lottie/lottie_icon.h"
+#include "settings/sections/settings_premium.h"
 #include "settings/settings_common.h"
 #include "ui/effects/premium_graphics.h"
 #include "ui/layers/generic_box.h"
@@ -159,6 +160,17 @@ void ShowOrPremiumBox(
 			std::move(skin.showButton),
 			st::showOrShowButton),
 		buttonPadding);
+	show->setClickedCallback([box, justShow, toast = skin.toast] {
+		justShow();
+		box->uiShow()->showToast(toast);
+		box->closeBox();
+	});
+	if (!Settings::PremiumPromotionAllowed()) {
+		box->setShowFinishedCallback([animate = std::move(icon.animate)] {
+			animate(anim::repeat::once);
+		});
+		return;
+	}
 	box->addRow(
 		MakeShowOrLabel(box, std::move(skin.orPremium)),
 		st::showOrLabelPadding + buttonPadding,
@@ -207,11 +219,6 @@ void ShowOrPremiumBox(
 	box->addButton(
 		object_ptr<AbstractButton>::fromRaw(premium));
 
-	show->setClickedCallback([box, justShow, toast = skin.toast] {
-		justShow();
-		box->uiShow()->showToast(toast);
-		box->closeBox();
-	});
 	premium->setClickedCallback(std::move(toPremium));
 }
 

@@ -67,6 +67,9 @@ TranscribeButton::TranscribeButton(
 TranscribeButton::~TranscribeButton() = default;
 
 QSize TranscribeButton::size() const {
+	if (hasLock() && !Settings::PremiumPromotionAllowed()) {
+		return {};
+	}
 	return _size;
 }
 
@@ -104,6 +107,9 @@ void TranscribeButton::paint(
 		int x,
 		int y,
 		const PaintContext &context) {
+	if (hasLock() && !Settings::PremiumPromotionAllowed()) {
+		return;
+	}
 	auto hq = PainterHighQualityEnabler(p);
 	const auto opened = _openedAnimation.value(_opened ? 1. : 0.);
 	const auto stm = context.messageStyle();
@@ -365,7 +371,9 @@ void TranscribeButton::setOpened(bool opened, Fn<void()> update) {
 }
 
 ClickHandlerPtr TranscribeButton::link() {
-	if (!_item->isHistoryEntry() || _item->isLocal()) {
+	if (!_item->isHistoryEntry()
+		|| _item->isLocal()
+		|| (hasLock() && !Settings::PremiumPromotionAllowed())) {
 		return nullptr;
 	} else if (_link) {
 		return _link;

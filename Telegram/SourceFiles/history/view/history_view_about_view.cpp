@@ -554,7 +554,9 @@ int EmptyChatLockedBox::buttonSkip() {
 }
 
 rpl::producer<QString> EmptyChatLockedBox::button() {
-	return (_type == Type::FreeDirect)
+	return (_type == Type::FreeDirect
+		|| (_type == Type::PremiumRequired
+			&& !Settings::PremiumPromotionAllowed()))
 		? nullptr
 		: (_type == Type::PremiumRequired)
 		? tr::lng_send_non_premium_go()
@@ -571,6 +573,10 @@ TextWithEntities EmptyChatLockedBox::subtitle() {
 }
 
 ClickHandlerPtr EmptyChatLockedBox::createViewLink() {
+	if (_type == Type::PremiumRequired
+		&& !Settings::PremiumPromotionAllowed()) {
+		return nullptr;
+	}
 	_buyStarsLoading = _buyStars.loadingValue();
 	const auto handler = [=](ClickContext context) {
 		const auto my = context.other.value<ClickHandlerContext>();
@@ -870,8 +876,10 @@ void AboutView::make(Data::ChatIntro data, bool preview) {
 	const auto sendIntroSticker = [=](not_null<DocumentData*> sticker) {
 		_sendIntroSticker.fire_copy(sticker);
 	};
-	owned->data()->setCustomServiceLink(
-		std::make_shared<LambdaClickHandler>(handler));
+	if (_history->session().premium() || Settings::PremiumPromotionAllowed()) {
+		owned->data()->setCustomServiceLink(
+			std::make_shared<LambdaClickHandler>(handler));
+	}
 	owned->overrideMedia(std::make_unique<HistoryView::MediaGeneric>(
 		owned.get(),
 		GenerateChatIntro(

@@ -133,6 +133,7 @@ void ListController::rebuild() {
 		}
 	}
 	if (!list.more
+		|| !::Settings::PremiumPromotionAllowed()
 		|| _peer->session().premium()
 		|| !_peer->session().premiumPossible()) {
 		delete base::take(_unlock);
