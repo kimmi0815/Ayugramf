@@ -306,6 +306,7 @@ MainWidget::MainWidget(
 	}, lifetime());
 
 	Core::App().exportManager().currentView(
+		&session()
 	) | rpl::on_next([=](Export::View::PanelController *view) {
 		setCurrentExportView(view);
 	}, lifetime());
@@ -1079,6 +1080,7 @@ void MainWidget::callTopBarHeightUpdated(int callTopBarHeight) {
 }
 
 void MainWidget::setCurrentExportView(Export::View::PanelController *view) {
+	_exportViewLifetime.destroy();
 	_currentExportView = view;
 	if (_currentExportView) {
 		_currentExportView->progressState(

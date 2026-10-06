@@ -39,18 +39,30 @@ public:
 		MsgId topicRootId,
 		const QString &topicTitle);
 
-	[[nodiscard]] rpl::producer<View::PanelController*> currentView() const;
+	[[nodiscard]] rpl::producer<View::PanelController*> currentView(
+		Main::Session *session = nullptr) const;
 	[[nodiscard]] bool inProgress() const;
 	[[nodiscard]] bool inProgress(not_null<Main::Session*> session) const;
-	void stopWithConfirmation(Fn<void()> callback);
+	void stopWithConfirmation(
+		Fn<void()> callback,
+		Main::Session *session = nullptr);
 	void stop();
 
 private:
-	void setupPanel(not_null<Main::Session*> session);
+	struct Job;
+	[[nodiscard]] Job *find(
+		not_null<Main::Session*> session,
+		uint64 peerId,
+		int32 topicRootId) const;
+	[[nodiscard]] View::PanelController *currentPanel(
+		Main::Session *session,
+		bool processingOnly = false) const;
+	void setupPanel(std::unique_ptr<Job> job);
+	void stop(uint64 id);
 
-	std::unique_ptr<Controller> _controller;
-	std::unique_ptr<View::PanelController> _panel;
-	rpl::event_stream<View::PanelController*> _viewChanges;
+	std::vector<std::unique_ptr<Job>> _jobs;
+	uint64 _nextId = 0;
+	rpl::event_stream<> _viewChanges;
 
 };
 

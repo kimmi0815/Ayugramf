@@ -15,11 +15,12 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <QtCore/QDir>
 #include <QtCore/QDate>
+#include <QtCore/QFileInfo>
 
 namespace Export {
 namespace Output {
 
-QString NormalizePath(const Settings &settings) {
+std::optional<QString> NormalizePath(const Settings &settings) {
 	QDir folder(settings.path);
 	const auto path = folder.absolutePath();
 	auto result = path.endsWith('/') ? path : (path + '/');
@@ -40,7 +41,14 @@ QString NormalizePath(const Settings &settings) {
 		return base + (i ? " (" + QString::number(i) + ')' : QString());
 	};
 	auto index = 0;
-	while (QDir(result + add(index)).exists()) {
+	if (!folder.exists() && !folder.mkpath(u"."_q)) {
+		return std::nullopt;
+	}
+	while (!folder.mkdir(add(index))) {
+		const auto info = QFileInfo(result + add(index));
+		if (!info.exists() && !info.isSymLink()) {
+			return std::nullopt;
+		}
 		++index;
 	}
 	result += add(index) + '/';

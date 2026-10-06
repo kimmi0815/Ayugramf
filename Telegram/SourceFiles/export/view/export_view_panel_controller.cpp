@@ -202,7 +202,9 @@ void PanelController::showSettings() {
 	settings->startClicks(
 	) | rpl::on_next([=]() {
 		showProgress();
-		_process->startExport(*_settings, PrepareEnvironment(_session));
+		auto settings = *_settings;
+		settings.forceSubPath = true;
+		_process->startExport(settings, PrepareEnvironment(_session));
 	}, settings->lifetime());
 
 	settings->cancelClicks(
@@ -404,6 +406,11 @@ void PanelController::updateState(State &&state) {
 		createPanel();
 	}
 	_state = std::move(state);
+	if (const auto processing = std::get_if<ProcessingState>(&_state)) {
+		if (_settings->onlySinglePeer() && !processing->entityName.isEmpty()) {
+			_panel->setTitle(rpl::single(processing->entityName));
+		}
+	}
 	if (const auto apiError = std::get_if<ApiErrorState>(&_state)) {
 		showError(*apiError);
 	} else if (const auto error = std::get_if<OutputErrorState>(&_state)) {

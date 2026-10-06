@@ -9,6 +9,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <QtCore/QString>
 
+#include <optional>
+
 namespace Export {
 namespace Data {
 struct PersonalInfo;
@@ -31,7 +33,7 @@ struct Environment;
 
 namespace Output {
 
-QString NormalizePath(const Settings &settings);
+[[nodiscard]] std::optional<QString> NormalizePath(const Settings &settings);
 
 struct Result;
 class Stats;

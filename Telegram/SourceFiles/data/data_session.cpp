@@ -1725,7 +1725,7 @@ void Session::suggestStartExport() {
 			std::min(left + 5, 3600) * crl::time(1000),
 			_session,
 			[=] { suggestStartExport(); });
-	} else if (Core::App().exportManager().inProgress()) {
+	} else if (Core::App().exportManager().inProgress(&session())) {
 		Export::View::ClearSuggestStart(&session());
 	} else {
 		_exportSuggestion = Export::View::SuggestStart(&session());

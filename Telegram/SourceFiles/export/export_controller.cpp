@@ -303,7 +303,12 @@ void ControllerObject::startExport(
 	_settings.singleTopicRootId = _topicRootId;
 	_settings.singleTopicPeerId = _topicPeerId;
 
-	_settings.path = Output::NormalizePath(_settings);
+	const auto path = Output::NormalizePath(_settings);
+	if (!path) {
+		ioError(_settings.path);
+		return;
+	}
+	_settings.path = *path;
 	_writer = Output::CreateWriter(_settings.format);
 	fillExportSteps();
 	exportNext();

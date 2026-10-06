@@ -969,7 +969,7 @@ void Application::logoutWithChecks(Main::Account *account) {
 	if (!account || !account->sessionExists()) {
 		logout(account);
 	} else if (_exportManager->inProgress(&account->session())) {
-		_exportManager->stopWithConfirmation(retry);
+		_exportManager->stopWithConfirmation(retry, &account->session());
 	} else if (account->session().uploadsInProgress()) {
 		account->session().uploadsStopWithConfirmation(retry);
 	} else if (_downloadManager->loadingInProgress(&account->session())) {
