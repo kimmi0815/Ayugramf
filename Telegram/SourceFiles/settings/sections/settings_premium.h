@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/settings_type.h"
 
 class DocumentData;
+class PeerData;
 enum class PremiumFeature;
 
 namespace style {

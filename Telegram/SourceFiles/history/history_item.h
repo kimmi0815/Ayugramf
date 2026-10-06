@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/runtime_composer.h"
 #include "data/data_media_types.h"
 #include "history/history_item_edition.h"
+#include "spellcheck/spellcheck_types.h"
 
 #include <any>
 
@@ -31,7 +32,6 @@ enum class HistorySelfDestructType;
 struct PreparedServiceText;
 struct MessageFactcheck;
 class ReplyKeyboard;
-struct LanguageId;
 enum class SuggestionActions : uchar;
 
 namespace Api {

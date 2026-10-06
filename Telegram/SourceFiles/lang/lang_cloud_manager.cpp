@@ -174,9 +174,9 @@ CloudManager::CloudManager(Instance &langpack)
 }
 
 Pack CloudManager::packTypeFromId(const QString &id) const {
-	if (id == LanguageIdOrDefault(_langpack.id())) {
+	if (AreLanguageIdsEquivalent(id, LanguageIdOrDefault(_langpack.id()))) {
 		return Pack::Current;
-	} else if (id == _langpack.baseId()) {
+	} else if (AreLanguageIdsEquivalent(id, _langpack.baseId())) {
 		return Pack::Base;
 	}
 	return Pack::None;
@@ -193,7 +193,7 @@ rpl::producer<> CloudManager::firstLanguageSuggestion() const {
 void CloudManager::requestLangPackDifference(const QString &langId) {
 	Expects(!langId.isEmpty());
 
-	if (langId == LanguageIdOrDefault(_langpack.id())) {
+	if (AreLanguageIdsEquivalent(langId, LanguageIdOrDefault(_langpack.id()))) {
 		requestLangPackDifference(Pack::Current);
 	} else {
 		requestLangPackDifference(Pack::Base);
@@ -324,6 +324,7 @@ void CloudManager::requestLanguageList() {
 		_languagesRequestId = 0;
 	}).fail([=] {
 		_languagesRequestId = 0;
+		_languageListChanged.fire({});
 	}).send();
 }
 
@@ -419,11 +420,18 @@ void CloudManager::requestLanguageAndSwitch(
 		bool warning) {
 	Expects(!id.isEmpty());
 
-	if (LanguageIdOrDefault(_langpack.id()) == id) {
+	if (LanguageIdOrDefault(_langpack.id()) == id
+		&& !IsJapaneseLanguage(id)) {
 		Ui::show(Ui::MakeInformBox(tr::lng_language_already()));
 		return;
 	} else if (id == u"#custom"_q) {
 		performSwitchToCustom();
+		return;
+	} else if (IsJapaneseLanguage(id)) {
+		switchToLanguage(JapaneseLanguage());
+		return;
+	} else if (id == DefaultLanguageId()) {
+		switchToLanguage(DefaultLanguage());
 		return;
 	}
 
@@ -438,13 +446,20 @@ void CloudManager::sendSwitchingToLanguageRequest() {
 		return;
 	}
 	_api->request(_switchingToLanguageRequest).cancel();
+	const auto requestedId = _switchingToLanguageId;
 	_switchingToLanguageRequest = _api->request(MTPlangpack_GetLanguage(
 		MTP_string(Lang::CloudLangPackName()),
-		MTP_string(_switchingToLanguageId)
+		MTP_string(requestedId)
 	)).done([=](const MTPLangPackLanguage &result) {
+		if (_switchingToLanguageId != requestedId) {
+			return;
+		}
 		_switchingToLanguageRequest = 0;
 		const auto language = Lang::ParseLanguage(result);
 		const auto finalize = [=] {
+			if (_switchingToLanguageId != requestedId) {
+				return;
+			}
 			if (canApplyWithoutRestart(language.id)) {
 				performSwitchAndAddToRecent(language);
 			} else {
@@ -463,6 +478,9 @@ void CloudManager::sendSwitchingToLanguageRequest() {
 			}
 		});
 	}).fail([=](const MTP::Error &error) {
+		if (_switchingToLanguageId != requestedId) {
+			return;
+		}
 		_switchingToLanguageRequest = 0;
 		if (error.type() == "LANG_CODE_NOT_SUPPORTED") {
 			Ui::show(Ui::MakeInformBox(tr::lng_language_not_found()));
@@ -471,17 +489,50 @@ void CloudManager::sendSwitchingToLanguageRequest() {
 }
 
 void CloudManager::switchToLanguage(const Language &data) {
+	if (IsJapaneseLanguage(data.id) && data.id != JapaneseLanguage().id) {
+		switchToLanguage(JapaneseLanguage());
+		return;
+	}
+	const auto switchingRequestId = base::take(_switchingToLanguageRequest);
+	const auto keysRequestId = base::take(_getKeysForSwitchRequestId);
+	_switchingToLanguageId = QString();
+	_switchingToLanguageWarning = false;
+	if (_api) {
+		_api->request(switchingRequestId).cancel();
+		_api->request(keysRequestId).cancel();
+	}
 	if (_langpack.id() == data.id && data.id != u"#custom"_q) {
 		return;
-	} else if (!_api) {
+	} else if (!_api
+		&& !IsJapaneseLanguage(data.id)
+		&& data.id != DefaultLanguageId()) {
 		return;
 	}
 
-	_api->request(base::take(_getKeysForSwitchRequestId)).cancel();
 	if (data.id == u"#custom"_q) {
 		performSwitchToCustom();
 	} else if (canApplyWithoutRestart(data.id)) {
 		performSwitchAndAddToRecent(data);
+	} else if (IsJapaneseLanguage(data.id)
+		|| data.id == DefaultLanguageId()) {
+		auto text = tr::lng_sure_save_language(tr::now) + "\n\n";
+		if (IsJapaneseLanguage(data.id)) {
+			const auto loader = FileParser(
+				u":/langs/ja_core.strings"_q,
+				{ tr::lng_sure_save_language.base });
+			text += loader.found().value(
+				tr::lng_sure_save_language.base,
+				GetOriginalValue(tr::lng_sure_save_language.base));
+		} else {
+			text += GetOriginalValue(tr::lng_sure_save_language.base);
+		}
+		Ui::show(
+			Ui::MakeConfirmBox({
+				.text = text,
+				.confirmed = [=] { performSwitchAndRestart(data); },
+				.confirmText = tr::lng_box_ok(),
+			}),
+			Ui::LayerOption::KeepOther);
 	} else {
 		QVector<MTPstring> keys;
 		keys.reserve(3);
@@ -577,6 +628,10 @@ void CloudManager::switchToTestLanguage() {
 void CloudManager::performSwitch(const Language &data) {
 	_restartAfterSwitch = false;
 	switchLangPackId(data);
+	if (IsJapaneseLanguage(_langpack.id())
+		|| _langpack.id() == DefaultLanguageId()) {
+		Local::writeLangPack();
+	}
 	requestLangPackDifference(Pack::Current);
 	requestLangPackDifference(Pack::Base);
 }
@@ -588,7 +643,11 @@ void CloudManager::performSwitchAndAddToRecent(const Language &data) {
 
 void CloudManager::performSwitchAndRestart(const Language &data) {
 	performSwitchAndAddToRecent(data);
-	restartAfterSwitch();
+	if (IsJapaneseLanguage(data.id) || data.id == DefaultLanguageId()) {
+		Core::Restart();
+	} else {
+		restartAfterSwitch();
+	}
 }
 
 void CloudManager::restartAfterSwitch() {

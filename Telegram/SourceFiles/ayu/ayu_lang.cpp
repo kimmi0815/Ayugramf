@@ -17,6 +17,8 @@
 
 // hard-coded languages
 std::map<QString, QString> langMapping = {
+	{ "ja-beta", "ja" },
+	{ "ja-raw", "ja" },
 	{"pt-br", "pt"},
 	{"zh-hans-beta", "zh-hans"},
 	{"zh-hant-beta", "zh-hant"},

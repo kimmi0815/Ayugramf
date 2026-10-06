@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/langs">
+        <file alias="ja_core.strings">../../langs/ja_core.strings</file>
         <file alias="ja_ayu.strings">../../langs/ja_ayu.strings</file>
     </qresource>
     <qresource prefix="/gui">

@@ -217,20 +217,24 @@ void ParseKeyValue(
 const std::map<ushort, QString> &JapaneseBundledValues() {
 	static const auto values = [] {
 		auto result = std::map<ushort, QString>();
-		const auto path = u":/langs/ja_ayu.strings"_q;
-		const auto content = FileParser::ReadFile(path, path);
-		const auto loader = FileParser(content, [&](
-				QLatin1String key,
-				const QByteArray &value) {
-			ParseKeyValue(
-				QByteArray(key.data(), key.size()),
-				value,
-				[&](ushort index, QString &&parsed) {
-					result[index] = std::move(parsed);
-				});
-		});
-		if (!loader.errors().isEmpty()) {
-			LOG(("Lang Error: Bundled Japanese: %1").arg(loader.errors()));
+		for (const auto &path : {
+			u":/langs/ja_core.strings"_q,
+			u":/langs/ja_ayu.strings"_q,
+		}) {
+			const auto content = FileParser::ReadFile(path, path);
+			const auto loader = FileParser(content, [&](
+					QLatin1String key,
+					const QByteArray &value) {
+				ParseKeyValue(
+					QByteArray(key.data(), key.size()),
+					value,
+					[&](ushort index, QString &&parsed) {
+						result[index] = std::move(parsed);
+					});
+			});
+			if (!loader.errors().isEmpty()) {
+				LOG(("Lang Error: Bundled Japanese: %1").arg(loader.errors()));
+			}
 		}
 		return result;
 	}();
@@ -257,6 +261,30 @@ Language DefaultLanguage() {
 	};
 }
 
+Language JapaneseLanguage() {
+	return Language{
+		u"ja-beta"_q,
+		u"ja"_q,
+		QString(),
+		u"Japanese"_q,
+		u"日本語"_q,
+	};
+}
+
+bool IsJapaneseLanguage(const QString &id) {
+	for (const auto &code : { u"ja"_q, u"ja-beta"_q, u"ja-raw"_q }) {
+		if (id == code) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool AreLanguageIdsEquivalent(const QString &first, const QString &second) {
+	return (first == second)
+		|| (IsJapaneseLanguage(first) && IsJapaneseLanguage(second));
+}
+
 struct Instance::PrivateTag {
 };
 
@@ -276,11 +304,11 @@ void Instance::switchToId(const Language &data) {
 		for (auto &value : _values) {
 			value = PrepareTestValue(value, _id[5]);
 		}
-		if (!_derived) {
-			_updated.fire({});
-		}
 	}
 	updatePluralRules();
+	if (!_derived) {
+		_updated.fire({});
+	}
 }
 
 void Instance::setBaseId(const QString &baseId, const QString &pluralId) {
@@ -302,16 +330,22 @@ void Instance::switchToCustomFile(const QString &filePath) {
 }
 
 void Instance::reset(const Language &data) {
-	const auto computedPluralId = !data.pluralId.isEmpty()
-		? data.pluralId
-		: !data.baseId.isEmpty()
-		? data.baseId
-		: data.id;
-	setBaseId(data.baseId, computedPluralId);
-	_id = LanguageIdOrDefault(data.id);
+	const auto language = (IsJapaneseLanguage(data.id)
+		&& data.id != JapaneseLanguage().id)
+		? JapaneseLanguage()
+		: data;
+	const auto computedPluralId = !language.pluralId.isEmpty()
+		? language.pluralId
+		: !language.baseId.isEmpty()
+		? language.baseId
+		: IsJapaneseLanguage(language.id)
+		? u"ja"_q
+		: language.id;
+	setBaseId(language.baseId, computedPluralId);
+	_id = LanguageIdOrDefault(language.id);
 	_pluralId = computedPluralId;
-	_name = data.name;
-	_nativeName = data.nativeName;
+	_name = language.name;
+	_nativeName = language.nativeName;
 
 	_customFilePathAbsolute = QString();
 	_customFilePathRelative = QString();
@@ -328,7 +362,7 @@ void Instance::reset(const Language &data) {
 }
 
 QString Instance::getDefaultValue(ushort key) const {
-	if (_id == u"ja"_q || baseId() == u"ja"_q) {
+	if (IsJapaneseLanguage(_id) || IsJapaneseLanguage(baseId())) {
 		const auto &values = JapaneseBundledValues();
 		const auto i = values.find(key);
 		if (i != end(values)) {
@@ -339,7 +373,8 @@ QString Instance::getDefaultValue(ushort key) const {
 }
 
 void Instance::applyBundledValues() {
-	if (_derived || (_id != u"ja"_q && baseId() != u"ja"_q)) {
+	if (_derived
+		|| (!IsJapaneseLanguage(_id) && !IsJapaneseLanguage(baseId()))) {
 		return;
 	}
 	for (const auto &[key, value] : JapaneseBundledValues()) {
@@ -573,21 +608,24 @@ void Instance::fillFromSerialized(
 		_base->fillFromSerialized(base, dataAppVersion);
 	}
 
-	_id = id;
+	_id = IsJapaneseLanguage(id) ? JapaneseLanguage().id : id;
 	_pluralId = (id == CustomLanguageId())
 		? PluralCodeForCustom(
 			customFilePathAbsolute,
 			customFilePathRelative)
+		: IsJapaneseLanguage(_id)
+		? u"ja"_q
 		: pluralId;
 	_name = name;
 	_nativeName = nativeName;
-	_version = version;
+	_version = (id == u"ja"_q) ? 0 : version;
 	_customFilePathAbsolute = customFilePathAbsolute;
 	_customFilePathRelative = customFilePathRelative;
 	_customFileContent = customFileContent;
 	LOG(("Lang Info: Loaded cached, keys: %1").arg(nonDefaultValuesCount));
 	for (auto i = 0, count = nonDefaultValuesCount * 2; i != count; i += 2) {
-		if (_id == u"ja"_q && nonDefaultStrings[i].startsWith("ayu_")) {
+		if (IsJapaneseLanguage(_id)
+			&& nonDefaultStrings[i].startsWith("ayu_")) {
 			continue;
 		}
 		applyValue(nonDefaultStrings[i], nonDefaultStrings[i + 1]);
@@ -597,6 +635,9 @@ void Instance::fillFromSerialized(
 	updateChoosingStickerReplacement();
 
 	_idChanges.fire_copy(_id);
+	if (!_derived && IsJapaneseLanguage(id) && id != _id) {
+		Local::writeLangPack();
+	}
 }
 
 void Instance::loadFromContent(const QByteArray &content) {
@@ -732,7 +773,9 @@ void Instance::applyDifference(
 
 void Instance::applyDifferenceToMe(
 		const MTPDlangPackDifference &difference) {
-	Expects(LanguageIdOrDefault(_id) == qs(difference.vlang_code()));
+	Expects(AreLanguageIdsEquivalent(
+		LanguageIdOrDefault(_id),
+		qs(difference.vlang_code())));
 	Expects(difference.vfrom_version().v <= _version);
 
 	_version = difference.vversion().v;

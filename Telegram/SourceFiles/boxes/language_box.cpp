@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/language_box.h"
 
 #include "base/platform/base_platform_info.h"
+#include "base/timer_rpl.h"
 #include "boxes/abstract_box.h"
 #include "boxes/premium_preview_box.h"
 #include "boxes/translate_box.h"
@@ -61,6 +62,8 @@ namespace {
 
 using Language = Lang::Language;
 using Languages = Lang::CloudManager::Languages;
+
+constexpr auto kLanguageListWait = crl::time(3000);
 
 class Rows : public Ui::RpWidget {
 public:
@@ -270,16 +273,32 @@ std::pair<Languages, Languages> PrepareLists() {
 	};
 	const auto current = Lang::LanguageIdOrDefault(Lang::Id());
 	auto official = Lang::CurrentCloudManager().languageList();
-	if (ranges::find(official, u"ja"_q, projId) == end(official)) {
-		official.push_back({
-			u"ja"_q,
-			u"ja"_q,
-			QString(),
-			u"Japanese"_q,
-			u"日本語"_q,
-		});
+	if (official.empty()) {
+		official.push_back(Lang::DefaultLanguage());
+	}
+	const auto japanese = Lang::JapaneseLanguage();
+	for (auto &language : official) {
+		if (Lang::IsJapaneseLanguage(language.id)) {
+			language = japanese;
+		}
+	}
+	auto officialIds = std::set<QString>();
+	official.erase(ranges::remove_if(official, [&](const Language &language) {
+		return !officialIds.emplace(language.id).second;
+	}), end(official));
+	if (ranges::find(official, japanese.id, projId) == end(official)) {
+		official.push_back(japanese);
 	}
 	auto recent = Local::readRecentLanguages();
+	for (auto &language : recent) {
+		if (Lang::IsJapaneseLanguage(language.id)) {
+			language = japanese;
+		}
+	}
+	auto recentIds = std::set<QString>();
+	recent.erase(ranges::remove_if(recent, [&](const Language &language) {
+		return !recentIds.emplace(language.id).second;
+	}), end(recent));
 	ranges::stable_partition(recent, [&](const Language &language) {
 		return (language.id == current);
 	});
@@ -1681,7 +1700,9 @@ base::binary_guard LanguageBox::Show(
 		auto guard = std::make_shared<base::binary_guard>(
 			result.make_guard());
 		auto lifetime = std::make_shared<rpl::lifetime>();
-		manager.languageListChanged(
+		rpl::merge(
+			manager.languageListChanged(),
+			base::timer_once(kLanguageListWait)
 		) | rpl::take(
 			1
 		) | rpl::on_next([=]() mutable {

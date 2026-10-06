@@ -34,6 +34,9 @@ inline bool operator!=(const Language &a, const Language &b) {
 QString CloudLangPackName();
 QString CustomLanguageId();
 Language DefaultLanguage();
+Language JapaneseLanguage();
+bool IsJapaneseLanguage(const QString &id);
+bool AreLanguageIdsEquivalent(const QString &first, const QString &second);
 
 class Instance;
 Instance &GetInstance();
