@@ -1,0 +1,327 @@
+#include <algorithm>
+#include <cassert>
+#include <cctype>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <optional>
+#include <string>
+#include <variant>
+#include <vector>
+#include "ayu/libs/json.hpp"
+using QChar = char16_t;
+struct QString {
+    std::u16string value;
+    QString() = default;
+    QString(std::u16string value) : value(std::move(value)) {}
+    QString(const char16_t *value) : value(value) {}
+    QString trimmed() const { auto first=value.find_first_not_of(u" \t\r\n"); if(first==value.npos)return {}; auto last=value.find_last_not_of(u" \t\r\n"); return value.substr(first,last-first+1); }
+    QString toLower() const { auto result=value; for(auto &ch:result)if(ch>=u'A'&&ch<=u'Z')ch+=32; return result; }
+    size_t size() const {return value.size();}
+    bool isEmpty() const {return value.empty();}
+    auto begin() const {return value.begin();}
+    auto end() const {return value.end();}
+    std::string toStdString() const {return {value.begin(),value.end()};}
+    static QString fromStdString(const std::string &value) {return std::u16string(value.begin(),value.end());}
+    friend bool operator==(const QString &,const QString &) = default;
+};
+QString operator""_q(const char16_t *value,size_t size) {return std::u16string(value,size);}
+void to_json(nlohmann::json &j,const QString &s) {j=s.toStdString();}
+void from_json(const nlohmann::json &j,QString &s) {s=QString::fromStdString(j.get<std::string>());}
+namespace ranges {
+    template<typename R,typename F>bool all_of(const R &r,F f) {return std::all_of(r.begin(),r.end(),f);}
+    template<typename R,typename T>bool contains(const R &r,const T &v) {return std::find(r.begin(),r.end(),v)!=r.end();}
+}
+struct QLocale {enum Language {AnyLanguage,C,English,Russian,Japanese,Ukrainian,French};};
+struct LanguageId {
+    QLocale::Language value = QLocale::AnyLanguage;
+    static LanguageId FromName(const QString &code) {
+        if(code==u"ru"_q)return {QLocale::Russian};
+        if(code==u"ja"_q)return {QLocale::Japanese};
+        if(code==u"uk"_q)return {QLocale::Ukrainian};
+        if(code==u"en"_q)return {QLocale::English};
+        if(code==u"fr"_q)return {QLocale::French};
+        return {QLocale::C};
+    }
+    QString twoLetterCode() const {
+        switch(value) {case QLocale::Russian:return u"ru"_q;case QLocale::Japanese:return u"ja"_q;case QLocale::Ukrainian:return u"uk"_q;case QLocale::French:return u"fr"_q;default:return u"en"_q;}
+    }
+    explicit operator bool()const{return value!=QLocale::AnyLanguage;}
+    friend bool operator==(LanguageId,LanguageId)=default;
+};
+template<typename T> using not_null=T;
+auto checks = 0;
+void Check(bool condition, int line) {
+    ++checks;
+    if (!condition) {
+        std::cerr << "FAIL at fixture line " << line << "\n";
+        std::exit(1);
+    }
+}
+#define CHECK(...) Check((__VA_ARGS__), __LINE__)
+#define Assert(...) assert(__VA_ARGS__)
+@AUTO_SETTINGS_STRUCT@
+@NORMALIZE_CODE@
+@NORMALIZE_SETTINGS@
+
+struct FakeVariable {
+    AutoTranslationSettings settings;
+    const AutoTranslationSettings &current()const{return settings;}
+    FakeVariable &operator=(AutoTranslationSettings value){settings=std::move(value);return *this;}
+};
+struct AyuSettings {
+    FakeVariable _autoTranslation;
+    static AyuSettings &getInstance(){static AyuSettings settings;return settings;}
+    bool autoTranslateEnabled() const{return _autoTranslation.current().enabled;}
+    const std::vector<QString> &autoTranslateFrom()const{return _autoTranslation.current().from;}
+    const QString &autoTranslateTo()const{return _autoTranslation.current().to;}
+};
+struct PeerData {
+    enum class TranslationFlag {Unknown,Disabled,Enabled};
+    TranslationFlag flag = TranslationFlag::Enabled;
+    TranslationFlag translationFlag()const{return flag;}
+};
+namespace Iv {
+struct RichPage {};
+}
+struct TextWithEntities {
+    QString text;
+    std::vector<int> entities;
+    bool empty() const { return text.isEmpty(); }
+    friend bool operator==(const TextWithEntities &, const TextWithEntities &) = default;
+};
+struct HistoryMessageTranslation {
+    TextWithEntities text;
+    std::shared_ptr<const Iv::RichPage> richPage;
+    LanguageId to;
+    LanguageId automaticFrom;
+    bool requested = false;
+    bool failed = false;
+    bool used = false;
+    static int Bit() { return 1; }
+};
+struct HistoryItem;
+struct History {
+    PeerData *peer = nullptr;
+    LanguageId translated;
+    bool visible = true;
+    LanguageId translatedTo() const { return translated; }
+    const History &owner() const { return *this; }
+    bool queryItemVisibility(HistoryItem *) const { return visible; }
+};
+struct HistoryItem {
+    History *owner = nullptr;
+    int id = 0;
+    bool outgoing = false;
+    TextWithEntities text;
+    bool service = false;
+    std::shared_ptr<const Iv::RichPage> page;
+    std::optional<HistoryMessageTranslation> cached;
+    History *history() const { return owner; }
+    bool out() const { return outgoing; }
+    int fullId() const { return id; }
+    bool isService() const { return service; }
+    const TextWithEntities &originalText() const { return text; }
+    std::shared_ptr<const Iv::RichPage> richPage() const { return page; }
+    const HistoryMessageTranslation *translation() const { return cached ? &*cached : nullptr; }
+    template<typename T> T *Get() { return cached ? &*cached : nullptr; }
+    void AddComponents(int) { cached.emplace(); }
+    void RemoveComponents(int) { cached.reset(); }
+    void translationToggle(HistoryMessageTranslation *value, bool used) { if (!value->text.empty()) value->used = used; }
+    bool translationShowRequiresRequest(LanguageId to, LanguageId automaticFrom = {});
+    const TextWithEntities &translatedText() const;
+    std::shared_ptr<const Iv::RichPage> translatedRichPage() const;
+};
+@RENDER_MATCHER@
+@ITEM_SHOW_REQUEST@
+@TEXT_ACCESSOR@
+@RICH_ACCESSOR@
+namespace HistoryView {
+struct TranslateTracker {
+    struct ItemForRecognize {
+        bool painted = false;
+        std::variant<QString, LanguageId> id;
+    };
+    struct RequestedContent {
+        TextWithEntities text;
+        std::shared_ptr<const Iv::RichPage> richPage;
+    };
+    History *_history = nullptr;
+    bool _automaticTranslationSuppressed = false;
+    LanguageId _manualTranslatedTo;
+    unsigned long long _generation = 1;
+    std::map<int, ItemForRecognize> _itemsForRecognize;
+    std::map<int, RequestedContent> _requestContents;
+    LanguageId translationTarget(HistoryItem *item) const;
+    LanguageId automaticSource(HistoryItem *item) const;
+    bool requestContentUnchanged(HistoryItem *item) const;
+    void showTranslationIfDesired(HistoryItem *item, LanguageId to);
+};
+@TARGET_METHOD@
+@AUTOMATIC_SOURCE_METHOD@
+@CONTENT_GUARD_METHOD@
+@DISPLAY_METHOD@
+}
+@REQUEST_CONSTANTS@
+@AUTO_SAVER@
+@AUTO_LOADER@
+
+struct FullMsgId {
+    int peer=0;
+    int msg=0;
+    friend auto operator<=>(FullMsgId,FullMsgId)=default;
+};
+struct ItemToRequest {int length=0;LanguageId to;bool rich=false;};
+struct Queue : std::map<FullMsgId,ItemToRequest> {auto &back(){return *rbegin();}};
+std::vector<FullMsgId> SelectBatch(Queue &_itemsToRequest) {
+    auto _requested=std::vector<FullMsgId>();
+    const auto to=_itemsToRequest.back().second.to;
+    const auto peerId=_itemsToRequest.back().first.peer;
+    const auto rich=_itemsToRequest.back().second.rich;
+    auto length=0;
+@BATCH_LOOP@
+    return _requested;
+}
+
+int main() {
+    const auto ru=LanguageId{QLocale::Russian},ja=LanguageId{QLocale::Japanese},uk=LanguageId{QLocale::Ukrainian},fr=LanguageId{QLocale::French};
+    auto &s=AyuSettings::getInstance();
+    Load(nlohmann::json::object(),s);
+    CHECK(!s.autoTranslateEnabled()&&s.autoTranslateFrom()==std::vector{u"ru"_q}&&s.autoTranslateTo()==u"ja"_q);
+    Load(nlohmann::json::parse(R"({"autoTranslateEnabled":true,"autoTranslateFrom":[" RU ","ru","UK","xx","JA",12],"autoTranslateTo":" JA "})"),s);
+    CHECK(s.autoTranslateEnabled()&&s.autoTranslateFrom()==std::vector({u"ru"_q,u"uk"_q,u"ja"_q})&&s.autoTranslateTo()==u"ja"_q);
+    Load(nlohmann::json::parse(R"({"autoTranslateEnabled":"true","autoTranslateFrom":"ru","autoTranslateTo":3})"),s);
+    CHECK(!s.autoTranslateEnabled()&&s.autoTranslateFrom()==std::vector{u"ru"_q}&&s.autoTranslateTo()==u"ja"_q);
+    Load(nlohmann::json::parse(R"({"autoTranslateEnabled":true,"autoTranslateFrom":[],"autoTranslateTo":"invalid"})"),s);
+    CHECK(s.autoTranslateEnabled()&&s.autoTranslateFrom()==std::vector{u"ru"_q}&&s.autoTranslateTo()==u"ja"_q);
+    Load(nlohmann::json::parse(R"({"autoTranslateEnabled":true,"autoTranslateFrom":["xx","??","","en_US"],"autoTranslateTo":"fr"})"),s);
+    CHECK(s.autoTranslateFrom()==std::vector{u"ru"_q}&&s.autoTranslateTo()==u"fr"_q);
+    Load(nlohmann::json::parse(R"({"autoTranslateEnabled":true,"autoTranslateFrom":["ru","uk","ja"],"autoTranslateTo":"ja"})"),s);
+    const auto saved = Save(s);
+    auto restored = AyuSettings();
+    Load(saved, restored);
+    CHECK(saved.size() == 3);
+    CHECK(restored._autoTranslation.current() == s._autoTranslation.current());
+    PeerData peer,migrated;
+    History history{&peer},old{&migrated};
+    HistoryItem item{&history,1,false,{u"original"_q}};
+    HistoryView::TranslateTracker tracker;
+    tracker._history=&history;
+    tracker._itemsForRecognize[item.id]={true,ru};
+    CHECK(tracker.translationTarget(&item)==ja);
+    tracker._itemsForRecognize[item.id].id=ja;
+    CHECK(!tracker.translationTarget(&item));
+    tracker._itemsForRecognize[item.id].id=uk;
+    CHECK(tracker.translationTarget(&item)==ja);
+    tracker._itemsForRecognize[item.id].id=fr;
+    CHECK(!tracker.translationTarget(&item));
+    tracker._itemsForRecognize[item.id].id=LanguageId{};
+    CHECK(!tracker.translationTarget(&item));
+    tracker._itemsForRecognize[item.id].id=ru;
+    tracker._itemsForRecognize[item.id].painted=false;
+    CHECK(!tracker.translationTarget(&item));
+    tracker._itemsForRecognize[item.id].painted=true;
+    item.outgoing=true;
+    CHECK(!tracker.translationTarget(&item));
+    item.outgoing=false;
+    peer.flag=PeerData::TranslationFlag::Disabled;
+    CHECK(!tracker.translationTarget(&item));
+    peer.flag=PeerData::TranslationFlag::Enabled;
+    item.owner=&old;
+    migrated.flag=PeerData::TranslationFlag::Disabled;
+    CHECK(!tracker.translationTarget(&item));
+    item.owner=&history;
+    tracker._automaticTranslationSuppressed=true;
+    CHECK(!tracker.translationTarget(&item));
+    tracker._automaticTranslationSuppressed=false;
+    tracker._manualTranslatedTo=fr;
+    CHECK(!tracker.translationTarget(&item));
+    tracker._manualTranslatedTo={};
+    history.translated=fr;
+    CHECK(tracker.translationTarget(&item)==fr);
+    history.translated={};
+
+    tracker._generation = 10;
+    CHECK(tracker.translationTarget(&item) == ja);
+    history.visible = false;
+    CHECK(!tracker.translationTarget(&item));
+    history.visible = true;
+    item.cached.emplace();
+    item.cached->to = ja;
+    item.cached->text = { u"translated"_q, { 1 } };
+    tracker.showTranslationIfDesired(&item, ja);
+    CHECK(item.cached->used);
+    CHECK(item.cached->automaticFrom == ru);
+    CHECK(item.translatedText().text == u"translated"_q);
+    tracker.showTranslationIfDesired(&item, fr);
+    CHECK(!item.cached->used);
+    CHECK(!item.cached->automaticFrom);
+    CHECK(item.translatedText() == item.originalText());
+    tracker.showTranslationIfDesired(&item, ja);
+    s._autoTranslation.settings.enabled = false;
+    CHECK(item.translatedText() == item.originalText());
+    s._autoTranslation.settings.enabled = true;
+    s._autoTranslation.settings.from = { u"uk"_q };
+    CHECK(item.translatedText() == item.originalText());
+    s._autoTranslation.settings.from = { u"ru"_q, u"uk"_q };
+    s._autoTranslation.settings.to = u"fr"_q;
+    CHECK(item.translatedText() == item.originalText());
+    s._autoTranslation.settings.to = u"ja"_q;
+    CHECK(item.translatedText().text == u"translated"_q);
+    peer.flag = PeerData::TranslationFlag::Disabled;
+    CHECK(item.translatedText() == item.originalText());
+    peer.flag = PeerData::TranslationFlag::Enabled;
+    item.outgoing = true;
+    CHECK(item.translatedText() == item.originalText());
+    item.outgoing = false;
+    history.translated = ja;
+    item.translationShowRequiresRequest(ja);
+    CHECK(!item.cached->automaticFrom);
+    CHECK(item.translatedText().text == u"translated"_q);
+    history.translated = {};
+    CHECK(item.translatedText() == item.originalText());
+    item.cached->automaticFrom = ru;
+    item.cached->used = true;
+    history.translated = fr;
+    CHECK(item.translatedText() == item.originalText());
+    history.translated = {};
+    item.page = std::make_shared<Iv::RichPage>();
+    item.cached->richPage = std::make_shared<Iv::RichPage>();
+    CHECK(item.translatedRichPage() == item.cached->richPage);
+    s._autoTranslation.settings.enabled = false;
+    CHECK(item.translatedRichPage() == item.page);
+    s._autoTranslation.settings.enabled = true;
+    history.translated = ja;
+    item.translationShowRequiresRequest(ja);
+    CHECK(item.translatedRichPage() == item.cached->richPage);
+    history.translated = {};
+    CHECK(item.translatedRichPage() == item.page);
+    tracker._requestContents[item.id] = { item.originalText(), item.richPage() };
+    CHECK(tracker.requestContentUnchanged(&item));
+    item.text.text = u"edited"_q;
+    CHECK(!tracker.requestContentUnchanged(&item));
+    tracker._requestContents[item.id] = { item.originalText(), item.richPage() };
+    item.text.entities.push_back(9);
+    CHECK(!tracker.requestContentUnchanged(&item));
+    tracker._requestContents[item.id] = { item.originalText(), item.richPage() };
+    item.page = std::make_shared<Iv::RichPage>();
+    CHECK(!tracker.requestContentUnchanged(&item));
+    CHECK(!tracker._requestContents.contains(100));
+    auto queue=Queue();
+    queue[{1,1}]={3,ja,false};queue[{1,2}]={3,fr,false};queue[{1,3}]={3,ja,false};
+    CHECK(SelectBatch(queue).size()==1);
+    CHECK(SelectBatch(queue).size()==1);
+    CHECK(SelectBatch(queue).size()==1);
+    queue[{1,1}]={3,ja,false};queue[{1,2}]={3,ja,true};queue[{2,1}]={3,ja,true};queue[{2,2}]={3,ja,true};
+    const auto first=SelectBatch(queue);
+    CHECK(first.size()==2&&first[0].peer==2&&first[1].peer==2);
+    CHECK(SelectBatch(queue).size()==1);
+    CHECK(SelectBatch(queue).size()==1);
+    for(int i=1;i<=25;++i)queue[{1,i}]={3,ja,false};
+    CHECK(SelectBatch(queue).size()==20&&queue.size()==5);
+    CHECK(SelectBatch(queue).size()==5&&queue.empty());
+    for(int i=1;i<=4;++i)queue[{1,i}]={12*1024,ja,false};
+    CHECK(SelectBatch(queue).size()==2&&queue.size()==2);
+    CHECK(SelectBatch(queue).size()==2&&queue.empty());
+    std::cout << "PASS: " << checks << " assertions for source-extracted config, target, visibility, render, edit guards and batching\n";
+}

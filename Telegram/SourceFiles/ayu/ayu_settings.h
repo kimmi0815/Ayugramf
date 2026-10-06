@@ -14,6 +14,7 @@
 
 #include <map>
 #include <unordered_set>
+#include <vector>
 
 
 namespace Main {
@@ -43,6 +44,16 @@ enum class TranslationProvider {
 	Google = 1,
 	Yandex = 2,
 	Native = 3,
+};
+
+struct AutoTranslationSettings {
+	bool enabled = false;
+	std::vector<QString> from = { u"ru"_q };
+	QString to = u"ja"_q;
+
+	friend bool operator==(
+		const AutoTranslationSettings &,
+		const AutoTranslationSettings &) = default;
 };
 
 enum class SendWithoutSoundOption {
@@ -347,6 +358,9 @@ public:
 	[[nodiscard]] bool voiceConfirmation() const { return _voiceConfirmation.current(); }
 	[[nodiscard]] bool roundConfirmation() const { return _roundConfirmation.current(); }
 	[[nodiscard]] TranslationProvider translationProvider() const { return _translationProvider.current(); }
+	[[nodiscard]] bool autoTranslateEnabled() const { return _autoTranslation.current().enabled; }
+	[[nodiscard]] const std::vector<QString> &autoTranslateFrom() const { return _autoTranslation.current().from; }
+	[[nodiscard]] const QString &autoTranslateTo() const { return _autoTranslation.current().to; }
 	[[nodiscard]] bool adaptiveCoverColor() const { return _adaptiveCoverColor.current(); }
 	[[nodiscard]] bool improveLinkPreviews() const { return _improveLinkPreviews.current(); }
 	[[nodiscard]] bool crashReporting() const { return _crashReporting.current(); }
@@ -434,6 +448,9 @@ public:
 	void setVoiceConfirmation(bool val);
 	void setRoundConfirmation(bool val);
 	void setTranslationProvider(TranslationProvider val);
+	void setAutoTranslateEnabled(bool enabled);
+	void setAutoTranslateFrom(std::vector<QString> from);
+	void setAutoTranslateTo(QString to);
 	void setAdaptiveCoverColor(bool val);
 	void setImproveLinkPreviews(bool val);
 	void setCrashReporting(bool val);
@@ -603,6 +620,8 @@ public:
 	[[nodiscard]] rpl::producer<bool> roundConfirmationChanges() const { return _roundConfirmation.changes(); }
 	[[nodiscard]] rpl::producer<TranslationProvider> translationProviderValue() const { return _translationProvider.value(); }
 	[[nodiscard]] rpl::producer<TranslationProvider> translationProviderChanges() const { return _translationProvider.changes(); }
+	[[nodiscard]] rpl::producer<AutoTranslationSettings> autoTranslationValue() const { return _autoTranslation.value(); }
+	[[nodiscard]] rpl::producer<AutoTranslationSettings> autoTranslationChanges() const { return _autoTranslation.changes(); }
 	[[nodiscard]] rpl::producer<bool> adaptiveCoverColorValue() const { return _adaptiveCoverColor.value(); }
 	[[nodiscard]] rpl::producer<bool> adaptiveCoverColorChanges() const { return _adaptiveCoverColor.changes(); }
 	[[nodiscard]] rpl::producer<bool> improveLinkPreviewsValue() const { return _improveLinkPreviews.value(); }
@@ -705,6 +724,7 @@ private:
 	rpl::variable<bool> _voiceConfirmation = false;
 	rpl::variable<bool> _roundConfirmation = false;
 	rpl::variable<TranslationProvider> _translationProvider = TranslationProvider::Telegram;
+	rpl::variable<AutoTranslationSettings> _autoTranslation;
 	rpl::variable<bool> _adaptiveCoverColor = true;
 	rpl::variable<bool> _improveLinkPreviews = false;
 	rpl::variable<bool> _crashReporting = true;

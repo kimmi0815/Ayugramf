@@ -7,15 +7,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/history_view_translate_tracker.h"
 
-#include "apiwrap.h"
 #include "api/api_transcribes.h"
+#include "apiwrap.h"
+#include "ayu/ayu_settings.h"
 #include "core/application.h"
 #include "core/core_settings.h"
 #include "data/data_changes.h"
-#include "data/data_channel.h"
-#include "data/data_flags.h"
 #include "data/data_peer.h"
-#include "data/data_peer_values.h" // Data::AmPremiumValue.
 #include "data/data_session.h"
 #include "history/history.h"
 #include "history/history_item.h"
@@ -26,10 +24,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session.h"
 #include "spellcheck/platform/platform_language.h"
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-
-
 namespace HistoryView {
 namespace {
 
@@ -38,6 +32,17 @@ constexpr auto kEnoughForTranslation = 6;
 constexpr auto kMaxCheckInBunch = 100;
 constexpr auto kRequestLengthLimit = 24 * 1024;
 constexpr auto kRequestCountLimit = 20;
+
+void ClearAutomaticTranslationSources(not_null<History*> history) {
+	for (const auto &block : history->blocks) {
+		for (const auto &view : block->messages) {
+			if (const auto translation = view->data()->Get<
+					HistoryMessageTranslation>()) {
+				translation->automaticFrom = {};
+			}
+		}
+	}
+}
 
 } // namespace
 
@@ -61,14 +66,7 @@ rpl::producer<bool> TranslateTracker::trackingLanguage() const {
 void TranslateTracker::setup() {
 	const auto peer = _history->peer;
 	peer->updateFull();
-
-	const auto channel = peer->asChannel();
-	auto autoTranslationValue = (channel
-		? (channel->flagsValue() | rpl::type_erased)
-		: rpl::single(Data::Flags<ChannelDataFlags>::Change({}, {}))
-		) | rpl::map([=](Data::Flags<ChannelDataFlags>::Change data) {
-		return (data.value & ChannelDataFlag::AutoTranslation);
-	}) | rpl::distinct_until_changed();
+	_manualTranslatedTo = _history->translatedTo();
 
 	using namespace rpl::mappers;
 	_trackingLanguage = Core::App().settings().translateChatEnabledValue();
@@ -77,11 +75,21 @@ void TranslateTracker::setup() {
 		if (tracking) {
 			recognizeCollected();
 			trackSkipLanguages();
-			trackTranslationDisabled();
 		} else {
 			checkRecognized({});
 			stopAndRevert();
 		}
+	}, _lifetime);
+	trackTranslationDisabled();
+	_history->session().changes().historyUpdates(
+		_history,
+		Data::HistoryUpdate::Flag::TranslatedTo
+	) | rpl::on_next([=] {
+		translationTargetChanged();
+	}, _lifetime);
+	AyuSettings::getInstance().autoTranslationChanges(
+	) | rpl::on_next([=](const AutoTranslationSettings &) {
+		resetAutomaticTranslation();
 	}, _lifetime);
 
 	AyuSettings::getInstance().translationProviderChanges(
@@ -96,7 +104,7 @@ bool TranslateTracker::enoughForRecognition() const {
 
 void TranslateTracker::startBunch() {
 	_addedInBunch = 0;
-	_bunchTranslatedTo = _history->translatedTo();
+	translationTargetChanged();
 	++_generation;
 }
 
@@ -115,7 +123,8 @@ bool TranslateTracker::add(not_null<HistoryItem*> item) {
 
 bool TranslateTracker::add(
 		not_null<HistoryItem*> item,
-		bool skipDependencies) {
+		bool skipDependencies,
+		bool visible) {
 	Expects(_addedInBunch >= 0);
 
 	if ((item->out() && !item->history()->peer->autoTranslation())
@@ -124,13 +133,10 @@ bool TranslateTracker::add(
 		|| item->isOnlyEmojiAndSpaces()) {
 		return false;
 	}
-	if (item->translationShowRequiresCheck(_bunchTranslatedTo)) {
-		_switchTranslations[item] = _bunchTranslatedTo;
-	}
 	if (!skipDependencies) {
 		if (const auto reply = item->Get<HistoryMessageReply>()) {
 			if (const auto to = reply->resolvedMessage.get()) {
-				add(to, true);
+				add(to, true, visible);
 			}
 		}
 #if 0 // I hope this is not needed, although I'm not sure.
@@ -146,20 +152,149 @@ bool TranslateTracker::add(
 #endif
 	}
 	const auto id = item->fullId();
-	const auto i = _itemsForRecognize.find(id);
+	const auto &text = item->originalText().text;
+	const auto textHash = qHash(text);
+	auto i = _itemsForRecognize.find(id);
 	if (i != end(_itemsForRecognize)) {
 		i->second.generation = _generation;
-		return true;
+		if (i->second.textHash != textHash) {
+			i->second.textHash = textHash;
+			i->second.id = text;
+			_itemsToRequest.erase(id);
+			item->removeTranslationBit();
+		}
+	} else {
+		i = _itemsForRecognize.emplace(id, ItemForRecognize{
+			.generation = _generation,
+			.textHash = textHash,
+			.id = text,
+		}).first;
+		++_addedInBunch;
 	}
-	const auto &text = item->originalText().text;
-	_itemsForRecognize.emplace(id, ItemForRecognize{
-		.generation = _generation,
-		.id = (_trackingLanguage.current()
-			? Platform::Language::Recognize(text)
-			: MaybeLanguageId{ text }),
-	});
-	++_addedInBunch;
+	if (visible) {
+		i->second.painted = true;
+	}
+	if (_trackingLanguage.current()
+		|| AyuSettings::getInstance().autoTranslateEnabled()) {
+		if (const auto unrecognized = std::get_if<QString>(&i->second.id)) {
+			i->second.id = Platform::Language::Recognize(*unrecognized);
+		}
+	}
+	const auto to = translationTarget(item);
+	if (item->translationShowRequiresCheck(to)) {
+		_switchTranslations[item] = to;
+	}
 	return true;
+}
+
+LanguageId TranslateTracker::translationTarget(
+		not_null<HistoryItem*> item) const {
+	if (const auto manual = _history->translatedTo()) {
+		return manual;
+	}
+	const auto &settings = AyuSettings::getInstance();
+	using Flag = PeerData::TranslationFlag;
+	if (!settings.autoTranslateEnabled()
+		|| _automaticTranslationSuppressed
+		|| _manualTranslatedTo
+		|| item->out()
+		|| _history->peer->translationFlag() == Flag::Disabled
+		|| item->history()->peer->translationFlag() == Flag::Disabled) {
+		return {};
+	}
+	const auto entry = _itemsForRecognize.find(item->fullId());
+	if (entry == end(_itemsForRecognize)
+		|| !entry->second.painted
+		|| !_history->owner().queryItemVisibility(item)) {
+		return {};
+	}
+	const auto from = std::get_if<LanguageId>(&entry->second.id);
+	const auto to = LanguageId::FromName(settings.autoTranslateTo());
+	if (!from || !*from || *from == to) {
+		return {};
+	}
+	return ranges::contains(settings.autoTranslateFrom(), from->twoLetterCode())
+		? to
+		: LanguageId();
+}
+
+LanguageId TranslateTracker::automaticSource(
+		not_null<HistoryItem*> item) const {
+	if (_history->translatedTo()) {
+		return {};
+	}
+	const auto entry = _itemsForRecognize.find(item->fullId());
+	if (entry != end(_itemsForRecognize)) {
+		if (const auto id = std::get_if<LanguageId>(&entry->second.id)) {
+			return *id;
+		}
+	}
+	return {};
+}
+
+void TranslateTracker::refreshTranslations() {
+	cancelToRequest();
+	cancelSentRequest();
+	_switchTranslations.clear();
+	const auto owner = &_history->owner();
+	for (const auto &id : base::take(_automaticTranslations)) {
+		if (const auto item = owner->message(id)) {
+			item->translationShowRequiresRequest({});
+		}
+	}
+	for (const auto &[id, entry] : _itemsForRecognize) {
+		if (const auto item = owner->message(id)) {
+			const auto to = translationTarget(item);
+			if (item->translationShowRequiresCheck(to)) {
+				switchTranslation(item, to);
+			}
+		}
+	}
+	requestSome();
+}
+
+void TranslateTracker::resetAutomaticTranslation() {
+	_automaticTranslationSuppressed = false;
+	if (AyuSettings::getInstance().autoTranslateEnabled()) {
+		recognizeCollected();
+	}
+	refreshTranslations();
+}
+
+void TranslateTracker::translationTargetChanged() {
+	const auto to = _history->translatedTo();
+	if (_manualTranslatedTo == to) {
+		return;
+	}
+	if (_manualTranslatedTo && !to) {
+		_automaticTranslationSuppressed = true;
+	}
+	_manualTranslatedTo = to;
+	if (to) {
+		ClearAutomaticTranslationSources(_history);
+		if (const auto migrated = _history->migrateFrom()) {
+			ClearAutomaticTranslationSources(migrated);
+		}
+	}
+	refreshTranslations();
+}
+
+bool TranslateTracker::requestContentUnchanged(
+		not_null<HistoryItem*> item) const {
+	const auto content = _requestContents.find(item->fullId());
+	return content != end(_requestContents)
+		&& content->second.text == item->originalText()
+		&& content->second.richPage == item->richPage();
+}
+
+void TranslateTracker::showTranslationIfDesired(
+		not_null<HistoryItem*> item,
+		LanguageId to) {
+	if (translationTarget(item) == to) {
+		item->translationShowRequiresRequest(to, automaticSource(item));
+	} else {
+		item->translationShowRequiresRequest({});
+	}
 }
 
 void TranslateTracker::switchTranslation(
@@ -167,12 +302,16 @@ void TranslateTracker::switchTranslation(
 		LanguageId id) {
 	_history->session().api().transcribes().checkSummaryToTranslate(
 		item->fullId());
-	if (item->translationShowRequiresRequest(id)) {
+	if (item->translationShowRequiresRequest(id, automaticSource(item))) {
 		_itemsToRequest.emplace(item->fullId(), ItemToRequest{
 			.length = int(item->originalText().text.size()),
+			.to = id,
 			.rich = (_provider->supportsMessageId()
 				&& (item->richPage() != nullptr)),
 		});
+	}
+	if (id && !_history->translatedTo()) {
+		_automaticTranslations.emplace(item->fullId());
 	}
 }
 
@@ -208,7 +347,8 @@ void TranslateTracker::addBunchFromBlocks() {
 	auto check = kMaxCheckInBunch;
 	for (const auto &block : _history->blocks) {
 		for (const auto &view : block->messages) {
-			if (!check-- || (add(view.get()) && enoughForRecognition())) {
+			if (!check--
+				|| (add(view->data(), false, false) && enoughForRecognition())) {
 				return;
 			}
 		}
@@ -227,7 +367,8 @@ void TranslateTracker::addBunchFrom(
 
 	auto check = kMaxCheckInBunch;
 	for (const auto &view : views) {
-		if (!check-- || (add(view.get()) && enoughForRecognition())) {
+		if (!check--
+			|| (add(view->data(), false, false) && enoughForRecognition())) {
 			return;
 		}
 	}
@@ -245,6 +386,7 @@ void TranslateTracker::cancelToRequest() {
 }
 
 void TranslateTracker::cancelSentRequest() {
+	_api.request(base::take(_richRequestId)).cancel();
 	if (_requestInProcess) {
 		const auto owner = &_history->owner();
 		for (const auto &id : base::take(_requested)) {
@@ -255,6 +397,7 @@ void TranslateTracker::cancelSentRequest() {
 		++_requestToken;
 		_requestInProcess = false;
 	}
+	_requestContents.clear();
 }
 
 void TranslateTracker::stopAndRevert() {
@@ -269,10 +412,12 @@ void TranslateTracker::stopAndRevert() {
 			}
 		}
 	}
+	_manualTranslatedTo = {};
 	_history->translateTo({});
 	if (const auto migrated = _history->migrateFrom()) {
 		migrated->translateTo({});
 	}
+	refreshTranslations();
 }
 
 void TranslateTracker::resetProvider() {
@@ -280,6 +425,7 @@ void TranslateTracker::resetProvider() {
 	cancelSentRequest();
 	_provider = Ui::CreateTranslateProvider(&_history->session());
 	invalidateTranslations();
+	refreshTranslations();
 }
 
 void TranslateTracker::invalidateTranslations() {
@@ -299,18 +445,23 @@ void TranslateTracker::invalidateTranslations() {
 	if (const auto migrated = _history->migrateFrom()) {
 		clear(migrated);
 	}
+	for (const auto &[id, entry] : _itemsForRecognize) {
+		if (const auto item = _history->owner().message(id)) {
+			if (item->Has<HistoryMessageTranslation>()) {
+				item->removeTranslationBit();
+				item->history()->owner().requestItemTextRefresh(item);
+			}
+		}
+	}
 }
 
 void TranslateTracker::requestSome() {
 	if (_requestInProcess || _itemsToRequest.empty()) {
 		return;
 	}
-	const auto to = _history->translatedTo();
-	if (!to) {
-		cancelToRequest();
-		return;
-	}
+	const auto to = _itemsToRequest.back().second.to;
 	_requested.clear();
+	_requestContents.clear();
 	_requested.reserve(_itemsToRequest.size());
 	const auto session = &_history->session();
 	const auto peerId = _itemsToRequest.back().first.peer;
@@ -319,7 +470,8 @@ void TranslateTracker::requestSome() {
 	for (auto i = _itemsToRequest.end(); i != _itemsToRequest.begin();) {
 		--i;
 		if (i->first.peer != peerId
-			|| i->second.rich != rich) {
+			|| i->second.rich != rich
+			|| i->second.to != to) {
 			break;
 		}
 		length += i->second.length;
@@ -344,6 +496,14 @@ void TranslateTracker::requestSome() {
 	ids.reserve(_requested.size());
 	for (const auto &id : _requested) {
 		if (const auto item = owner->message(id)) {
+			if (translationTarget(item) != to) {
+				item->translationShowRequiresRequest({});
+				continue;
+			}
+			_requestContents.emplace(id, RequestedContent{
+				.text = item->originalText(),
+				.richPage = item->richPage(),
+			});
 			requests.push_back(Ui::PrepareTranslateProviderRequest(
 				_provider.get(),
 				session->data().peer(id.peer),
@@ -359,11 +519,14 @@ void TranslateTracker::requestSome() {
 	}
 	_requestInProcess = true;
 	const auto requestToken = ++_requestToken;
+	const auto weak = base::make_weak(this);
 	_provider->requestBatch(
 		std::move(requests),
 		to,
 		[=](int index, Ui::TranslateProviderResult result) {
-			if (!_requestInProcess || (_requestToken != requestToken)) {
+			if (!weak
+				|| !_requestInProcess
+				|| (_requestToken != requestToken)) {
 				return;
 			}
 			if (index < 0 || index >= _requested.size()) {
@@ -371,17 +534,26 @@ void TranslateTracker::requestSome() {
 			}
 			const auto &id = _requested[index];
 			if (const auto item = owner->message(id)) {
+				if (!requestContentUnchanged(item)) {
+					item->translationShowRequiresRequest({});
+					owner->requestItemTextRefresh(item);
+					return;
+				}
 				item->translationDone(
 					to,
 					result.text.value_or(TextWithEntities()));
+				showTranslationIfDesired(item, to);
 			}
 		},
 		[=] {
-			if (!_requestInProcess || (_requestToken != requestToken)) {
+			if (!weak
+				|| !_requestInProcess
+				|| (_requestToken != requestToken)) {
 				return;
 			}
 			_requestInProcess = false;
 			_requested.clear();
+			_requestContents.clear();
 			requestSome();
 		});
 }
@@ -405,9 +577,17 @@ void TranslateTracker::requestSomeRich(LanguageId to, PeerId peerId) {
 	ids.reserve(_requested.size());
 	for (const auto &id : _requested) {
 		const auto item = owner->message(id);
-		if (item && item->richPage()) {
+		if (item
+			&& item->richPage()
+			&& translationTarget(item) == to) {
 			mtpIds.push_back(MTP_int(id.msg));
 			ids.push_back(id);
+			_requestContents.emplace(id, RequestedContent{
+				.text = item->originalText(),
+				.richPage = item->richPage(),
+			});
+		} else if (item) {
+			item->translationShowRequiresRequest({});
 		}
 	}
 	_requested = std::move(ids);
@@ -418,12 +598,14 @@ void TranslateTracker::requestSomeRich(LanguageId to, PeerId peerId) {
 	_requestInProcess = true;
 	const auto requestToken = ++_requestToken;
 	const auto finish = [=] {
+		_richRequestId = 0;
 		_requestInProcess = false;
 		_requested.clear();
+		_requestContents.clear();
 		requestSome();
 	};
 	using Flag = MTPmessages_TranslateRichMessage::Flag;
-	_api.request(MTPmessages_TranslateRichMessage(
+	_richRequestId = _api.request(MTPmessages_TranslateRichMessage(
 		MTP_flags(Flag::f_peer | Flag::f_id),
 		peer->input(),
 		MTP_vector<MTPint>(mtpIds),
@@ -437,9 +619,15 @@ void TranslateTracker::requestSomeRich(LanguageId to, PeerId peerId) {
 		const auto &list = result.data().vresult().v;
 		for (auto i = 0, count = int(_requested.size()); i != count; ++i) {
 			if (const auto item = owner->message(_requested[i])) {
+				if (!requestContentUnchanged(item)) {
+					item->translationShowRequiresRequest({});
+					owner->requestItemTextRefresh(item);
+					continue;
+				}
 				item->translationDone(to, (i < list.size())
 					? Iv::ParseRichPage(session, list[i])
 					: nullptr);
+				showTranslationIfDesired(item, to);
 			}
 		}
 		finish();
@@ -449,7 +637,12 @@ void TranslateTracker::requestSomeRich(LanguageId to, PeerId peerId) {
 		}
 		for (const auto &id : _requested) {
 			if (const auto item = owner->message(id)) {
-				item->translationDone(to, TextWithEntities());
+				if (requestContentUnchanged(item)) {
+					item->translationDone(to, TextWithEntities());
+				} else {
+					item->translationShowRequiresRequest({});
+					owner->requestItemTextRefresh(item);
+				}
 			}
 		}
 		finish();
@@ -516,11 +709,12 @@ void TranslateTracker::trackTranslationDisabled() {
 		PeerFlag::TranslationDisabled
 	) | rpl::skip(1) | rpl::on_next([=] {
 		using TranslationFlag = PeerData::TranslationFlag;
-		if (_history->peer->translationFlag() == TranslationFlag::Disabled
-			&& _history->translatedTo()) {
+		if (_history->peer->translationFlag() == TranslationFlag::Disabled) {
 			stopAndRevert();
+		} else {
+			refreshTranslations();
 		}
-	}, _trackingLifetime);
+	}, _lifetime);
 }
 
 void TranslateTracker::checkRecognized() {

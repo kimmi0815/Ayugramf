@@ -441,6 +441,7 @@ struct HistoryMessageTranslation
 	TextWithEntities text;
 	std::shared_ptr<const Iv::RichPage> richPage;
 	LanguageId to;
+	LanguageId automaticFrom;
 	bool requested = false;
 	bool failed = false;
 	bool used = false;

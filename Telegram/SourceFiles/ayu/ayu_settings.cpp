@@ -19,6 +19,7 @@
 #include "main/main_session.h"
 #include "platform/platform_translate_provider.h"
 #include "rpl/combine.h"
+#include "spellcheck/spellcheck_types.h"
 #include "window/window_controller.h"
 
 #include <fstream>
@@ -27,6 +28,38 @@
 using json = nlohmann::json;
 
 namespace {
+
+QString NormalizeTranslationLanguageCode(QString code) {
+	code = code.trimmed().toLower();
+	if (code.size() != 2
+		|| !ranges::all_of(code, [](QChar ch) {
+			return ch >= u'a' && ch <= u'z';
+		})) {
+		return {};
+	}
+	const auto id = LanguageId::FromName(code);
+	return (id.value != QLocale::C && id.twoLetterCode() == code)
+		? code
+		: QString();
+}
+
+AutoTranslationSettings NormalizeAutoTranslation(
+		AutoTranslationSettings settings) {
+	const auto defaults = AutoTranslationSettings();
+	auto from = std::vector<QString>();
+	for (const auto &entry : settings.from) {
+		auto code = NormalizeTranslationLanguageCode(entry);
+		if (!code.isEmpty() && !ranges::contains(from, code)) {
+			from.push_back(std::move(code));
+		}
+	}
+	settings.from = from.empty() ? defaults.from : std::move(from);
+	settings.to = NormalizeTranslationLanguageCode(std::move(settings.to));
+	if (settings.to.isEmpty()) {
+		settings.to = defaults.to;
+	}
+	return settings;
+}
 
 std::string getSettingsPath() {
 	return (cWorkingDir() + u"tdata/ayu_settings.json"_q).toStdString();
@@ -509,6 +542,12 @@ void AyuSettings::validate() {
 	validateEnum(_showAddFilterInContextMenu, defaults._showAddFilterInContextMenu);
 
 	validateEnum(_translationProvider, defaults._translationProvider, 3);
+	const auto autoTranslation = NormalizeAutoTranslation(
+		_autoTranslation.current());
+	if (_autoTranslation.current() != autoTranslation) {
+		_autoTranslation = autoTranslation;
+		modified = true;
+	}
 	if ((_translationProvider.current() == TranslationProvider::Native)
 		&& !Platform::IsTranslateProviderAvailable()) {
 		_translationProvider = defaults._translationProvider.current();
@@ -1030,6 +1069,38 @@ void AyuSettings::setTranslationProvider(TranslationProvider val) {
 	save();
 }
 
+void AyuSettings::setAutoTranslateEnabled(bool enabled) {
+	auto settings = _autoTranslation.current();
+	if (settings.enabled == enabled) {
+		return;
+	}
+	settings.enabled = enabled;
+	_autoTranslation = std::move(settings);
+	save();
+}
+
+void AyuSettings::setAutoTranslateFrom(std::vector<QString> from) {
+	auto settings = _autoTranslation.current();
+	settings.from = std::move(from);
+	settings = NormalizeAutoTranslation(std::move(settings));
+	if (_autoTranslation.current() == settings) {
+		return;
+	}
+	_autoTranslation = std::move(settings);
+	save();
+}
+
+void AyuSettings::setAutoTranslateTo(QString to) {
+	auto settings = _autoTranslation.current();
+	settings.to = std::move(to);
+	settings = NormalizeAutoTranslation(std::move(settings));
+	if (_autoTranslation.current() == settings) {
+		return;
+	}
+	_autoTranslation = std::move(settings);
+	save();
+}
+
 void AyuSettings::setAdaptiveCoverColor(bool val) {
 	if (_adaptiveCoverColor.current() == val) return;
 	_adaptiveCoverColor = val;
@@ -1159,6 +1230,9 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 		{"voiceConfirmation", s._voiceConfirmation.current()},
 		{"roundConfirmation", s._roundConfirmation.current()},
 		{"translationProvider", s._translationProvider.current()},
+		{"autoTranslateEnabled", s._autoTranslation.current().enabled},
+		{"autoTranslateFrom", s._autoTranslation.current().from},
+		{"autoTranslateTo", s._autoTranslation.current().to},
 		{"adaptiveCoverColor", s._adaptiveCoverColor.current()},
 		{"improveLinkPreviews", s._improveLinkPreviews.current()},
 		{"crashReporting", s._crashReporting.current()},
@@ -1263,6 +1337,25 @@ void from_json(const nlohmann::json &j, AyuSettings &s) {
 	s._voiceConfirmation = j.value("voiceConfirmation", defaults._voiceConfirmation.current());
 	s._roundConfirmation = j.value("roundConfirmation", defaults._roundConfirmation.current());
 	s._translationProvider = j.value("translationProvider", defaults._translationProvider.current());
+	auto autoTranslation = AutoTranslationSettings();
+	const auto enabled = j.find("autoTranslateEnabled");
+	if (enabled != j.end() && enabled->is_boolean()) {
+		autoTranslation.enabled = enabled->get<bool>();
+	}
+	const auto from = j.find("autoTranslateFrom");
+	if (from != j.end() && from->is_array()) {
+		autoTranslation.from.clear();
+		for (const auto &entry : *from) {
+			if (entry.is_string()) {
+				autoTranslation.from.push_back(entry.get<QString>());
+			}
+		}
+	}
+	const auto to = j.find("autoTranslateTo");
+	if (to != j.end() && to->is_string()) {
+		autoTranslation.to = to->get<QString>();
+	}
+	s._autoTranslation = NormalizeAutoTranslation(std::move(autoTranslation));
 	s._adaptiveCoverColor = j.value("adaptiveCoverColor", defaults._adaptiveCoverColor.current());
 	s._improveLinkPreviews = j.value("improveLinkPreviews", defaults._improveLinkPreviews.current());
 	s._crashReporting = j.value("crashReporting", defaults._crashReporting.current());

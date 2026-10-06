@@ -506,7 +506,9 @@ public:
 		not_null<Data::Thread*> to) const;
 	[[nodiscard]] const HistoryMessageTranslation *translation() const;
 	[[nodiscard]] bool translationShowRequiresCheck(LanguageId to) const;
-	bool translationShowRequiresRequest(LanguageId to);
+	bool translationShowRequiresRequest(
+		LanguageId to,
+		LanguageId automaticFrom = {});
 	void translationDone(LanguageId to, TextWithEntities result);
 	void translationDone(
 		LanguageId to,

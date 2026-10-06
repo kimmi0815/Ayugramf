@@ -93,6 +93,24 @@ constexpr auto kMinLoginCode = 5;
 
 using ItemPreview = HistoryView::ItemPreview;
 
+bool TranslationMatchesTarget(
+		not_null<const HistoryItem*> item,
+		const HistoryMessageTranslation &translation) {
+	if (const auto to = item->history()->translatedTo()) {
+		return translation.to == to;
+	}
+	const auto &settings = AyuSettings::getInstance();
+	return translation.automaticFrom
+		&& !item->out()
+		&& settings.autoTranslateEnabled()
+		&& item->history()->peer->translationFlag()
+			!= PeerData::TranslationFlag::Disabled
+		&& translation.to.twoLetterCode() == settings.autoTranslateTo()
+		&& ranges::contains(
+			settings.autoTranslateFrom(),
+			translation.automaticFrom.twoLetterCode());
+}
+
 template <typename T>
 [[nodiscard]] PreparedServiceText PrepareEmptyText(const T &) {
 	return PreparedServiceText();
@@ -3340,10 +3358,13 @@ bool HistoryItem::translationShowRequiresCheck(LanguageId to) const {
 	}
 }
 
-bool HistoryItem::translationShowRequiresRequest(LanguageId to) {
+bool HistoryItem::translationShowRequiresRequest(
+		LanguageId to,
+		LanguageId automaticFrom) {
 	// When changing be sure to reflect in translationShowRequiresCheck(to).
 	if (!to) {
 		if (const auto translation = Get<HistoryMessageTranslation>()) {
+			translation->automaticFrom = {};
 			if (!translation->failed && translation->text.empty()) {
 				Assert(!translation->used);
 				RemoveComponents(HistoryMessageTranslation::Bit());
@@ -3353,6 +3374,7 @@ bool HistoryItem::translationShowRequiresRequest(LanguageId to) {
 		}
 		return false;
 	} else if (const auto translation = Get<HistoryMessageTranslation>()) {
+		translation->automaticFrom = automaticFrom;
 		if (translation->to == to) {
 			translationToggle(translation, true);
 			return false;
@@ -3368,6 +3390,7 @@ bool HistoryItem::translationShowRequiresRequest(LanguageId to) {
 		AddComponents(HistoryMessageTranslation::Bit());
 		const auto added = Get<HistoryMessageTranslation>();
 		added->to = to;
+		added->automaticFrom = automaticFrom;
 		added->requested = true;
 		return true;
 	}
@@ -3810,7 +3833,7 @@ const TextWithEntities &HistoryItem::translatedText() const {
 	} else if (const auto translation = this->translation()
 		; translation
 		&& translation->used
-		&& (translation->to == history()->translatedTo())) {
+		&& TranslationMatchesTarget(this, *translation)) {
 		return translation->text;
 	} else {
 		return originalText();
@@ -3851,7 +3874,7 @@ auto HistoryItem::translatedRichPage() const
 		; translation
 		&& translation->used
 		&& translation->richPage
-		&& (translation->to == history()->translatedTo())) {
+		&& TranslationMatchesTarget(this, *translation)) {
 		return translation->richPage;
 	}
 	return original;

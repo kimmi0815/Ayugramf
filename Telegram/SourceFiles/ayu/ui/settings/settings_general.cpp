@@ -6,7 +6,6 @@
 // Copyright @Radolyn, 2026
 #include "ayu/ui/settings/settings_general.h"
 
-#include "lang_auto.h"
 #include "ayu/ayu_settings.h"
 #include "ayu/ui/settings/ayu_builder.h"
 #include "ayu/ui/settings/settings_ayu_utils.h"
@@ -14,11 +13,13 @@
 #include "base/platform/base_platform_info.h"
 #include "core/application.h"
 #include "lang/lang_text_entity.h"
+#include "lang_auto.h"
 #include "platform/platform_translate_provider.h"
+#include "rpl/combine.h"
 #include "settings/settings_builder.h"
 #include "settings/settings_common.h"
-#include "styles/style_menu_icons.h"
-#include "styles/style_settings.h"
+#include "spellcheck/spellcheck_types.h"
+#include "ui/boxes/choose_language_box.h"
 #include "ui/boxes/single_choice_box.h"
 #include "ui/toast/toast.h"
 #include "ui/widgets/buttons.h"
@@ -26,12 +27,99 @@
 #include "window/window_controller.h"
 #include "window/window_session_controller.h"
 
+#include "styles/style_menu_icons.h"
+#include "styles/style_settings.h"
+
 namespace Settings {
 
 using namespace Builder;
 using namespace AyuBuilder;
 
 namespace {
+
+std::vector<LanguageId> AutoTranslationLanguages(
+		const std::vector<QString> &codes) {
+	auto result = std::vector<LanguageId>();
+	result.reserve(codes.size());
+	for (const auto &code : codes) {
+		result.push_back(LanguageId::FromName(code));
+	}
+	return result;
+}
+
+void BuildAutomaticTranslator(
+		SectionBuilder &builder,
+		AyuSectionBuilder &ayu) {
+	const auto settings = &AyuSettings::getInstance();
+	const auto controller = builder.controller();
+	ayu.addSettingToggle({
+		.id = u"ayu/autoTranslateEnabled"_q,
+		.title = tr::lng_ayu_auto_translate(),
+		.getter = &AyuSettings::autoTranslateEnabled,
+		.setter = &AyuSettings::setAutoTranslateEnabled,
+	});
+	builder.addButton({
+		.id = u"ayu/autoTranslateFrom"_q,
+		.title = tr::lng_ayu_auto_translate_from(),
+		.st = &st::settingsButtonNoIcon,
+		.label = rpl::combine(
+			settings->autoTranslationValue(),
+			tr::lng_languages()
+		) | rpl::map([](
+				const AutoTranslationSettings &settings,
+				const QString &) {
+			auto names = QStringList();
+			for (const auto &id : AutoTranslationLanguages(settings.from)) {
+				names.push_back(Ui::LanguageName(id));
+			}
+			return names.join(u", "_q);
+		}),
+		.onClick = [=] {
+			controller->show(Box(
+				Ui::ChooseLanguageBox,
+				tr::lng_ayu_auto_translate_from(),
+				[=](std::vector<LanguageId> languages) {
+					auto codes = std::vector<QString>();
+					codes.reserve(languages.size());
+					for (const auto &id : languages) {
+						codes.push_back(id.twoLetterCode());
+					}
+					settings->setAutoTranslateFrom(std::move(codes));
+				},
+				AutoTranslationLanguages(settings->autoTranslateFrom()),
+				true,
+				Fn<bool(LanguageId)>()));
+		},
+	});
+	builder.addButton({
+		.id = u"ayu/autoTranslateTo"_q,
+		.title = tr::lng_ayu_auto_translate_to(),
+		.st = &st::settingsButtonNoIcon,
+		.label = rpl::combine(
+			settings->autoTranslationValue(),
+			tr::lng_languages()
+		) | rpl::map([](
+				const AutoTranslationSettings &settings,
+				const QString &) {
+			return Ui::LanguageName(LanguageId::FromName(settings.to));
+		}),
+		.onClick = [=] {
+			controller->show(Box(
+				Ui::ChooseLanguageBox,
+				tr::lng_ayu_auto_translate_to(),
+				[=](std::vector<LanguageId> languages) {
+					if (!languages.empty()) {
+						settings->setAutoTranslateTo(
+							languages.front().twoLetterCode());
+					}
+				},
+				std::vector{ LanguageId::FromName(settings->autoTranslateTo()) },
+				false,
+				Fn<bool(LanguageId)>()));
+		},
+	});
+	builder.addDividerText(tr::lng_ayu_auto_translate_about());
+}
 
 void BuildTranslator(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 	builder.addSubsectionTitle(tr::lng_translate_settings_subtitle());
@@ -113,6 +201,7 @@ void BuildTranslator(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 	if (button) {
 		ayu.addBetaBadge(button);
 	}
+	BuildAutomaticTranslator(builder, ayu);
 }
 
 void BuildShowPeerId(SectionBuilder &builder) {
