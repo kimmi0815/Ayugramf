@@ -1,4 +1,7 @@
 <RCC>
+    <qresource prefix="/langs">
+        <file alias="ja_ayu.strings">../../langs/ja_ayu.strings</file>
+    </qresource>
     <qresource prefix="/gui">
         <file alias="art/ayu/alt/app.svg">../../art/ayu/alt/app.svg</file>
         <file alias="art/ayu/alt/app_icon.ico">../../art/ayu/alt/app_icon.ico</file>

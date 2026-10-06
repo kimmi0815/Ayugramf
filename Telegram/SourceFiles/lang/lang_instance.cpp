@@ -214,6 +214,29 @@ void ParseKeyValue(
 	}
 }
 
+const std::map<ushort, QString> &JapaneseBundledValues() {
+	static const auto values = [] {
+		auto result = std::map<ushort, QString>();
+		const auto path = u":/langs/ja_ayu.strings"_q;
+		const auto content = FileParser::ReadFile(path, path);
+		const auto loader = FileParser(content, [&](
+				QLatin1String key,
+				const QByteArray &value) {
+			ParseKeyValue(
+				QByteArray(key.data(), key.size()),
+				value,
+				[&](ushort index, QString &&parsed) {
+					result[index] = std::move(parsed);
+				});
+		});
+		if (!loader.errors().isEmpty()) {
+			LOG(("Lang Error: Bundled Japanese: %1").arg(loader.errors()));
+		}
+		return result;
+	}();
+	return values;
+}
+
 } // namespace
 
 QString CloudLangPackName() {
@@ -296,12 +319,34 @@ void Instance::reset(const Language &data) {
 	_version = 0;
 	_nonDefaultValues.clear();
 	for (auto i = 0, count = int(_values.size()); i != count; ++i) {
-		_values[i] = GetOriginalValue(ushort(i));
+		_values[i] = getDefaultValue(ushort(i));
 	}
 	ranges::fill(_nonDefaultSet, 0);
 	updateChoosingStickerReplacement();
 
 	_idChanges.fire_copy(_id);
+}
+
+QString Instance::getDefaultValue(ushort key) const {
+	if (_id == u"ja"_q || baseId() == u"ja"_q) {
+		const auto &values = JapaneseBundledValues();
+		const auto i = values.find(key);
+		if (i != end(values)) {
+			return i->second;
+		}
+	}
+	return GetOriginalValue(key);
+}
+
+void Instance::applyBundledValues() {
+	if (_derived || (_id != u"ja"_q && baseId() != u"ja"_q)) {
+		return;
+	}
+	for (const auto &[key, value] : JapaneseBundledValues()) {
+		if (!_nonDefaultSet[key] && (!_base || !_base->_nonDefaultSet[key])) {
+			_values[key] = value;
+		}
+	}
 }
 
 QString Instance::systemLangCode() const {
@@ -542,8 +587,12 @@ void Instance::fillFromSerialized(
 	_customFileContent = customFileContent;
 	LOG(("Lang Info: Loaded cached, keys: %1").arg(nonDefaultValuesCount));
 	for (auto i = 0, count = nonDefaultValuesCount * 2; i != count; i += 2) {
+		if (_id == u"ja"_q && nonDefaultStrings[i].startsWith("ayu_")) {
+			continue;
+		}
 		applyValue(nonDefaultStrings[i], nonDefaultStrings[i + 1]);
 	}
+	applyBundledValues();
 	updatePluralRules();
 	updateChoosingStickerReplacement();
 
@@ -771,9 +820,9 @@ void Instance::resetValue(const QByteArray &key) {
 				: QString();
 			_values[keyIndex] = !base.isEmpty()
 				? base
-				: GetOriginalValue(keyIndex);
+				: getDefaultValue(keyIndex);
 		} else if (!_derived->_nonDefaultSet[keyIndex]) {
-			_derived->_values[keyIndex] = GetOriginalValue(keyIndex);
+			_derived->_values[keyIndex] = _derived->getDefaultValue(keyIndex);
 		}
 		if (keyIndex == tr::lng_send_action_choose_sticker.base
 			|| keyIndex == tr::lng_user_action_choose_sticker.base) {

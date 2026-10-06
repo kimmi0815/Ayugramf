@@ -111,6 +111,8 @@ public:
 
 private:
 	void setBaseId(const QString &baseId, const QString &pluralId);
+	QString getDefaultValue(ushort key) const;
+	void applyBundledValues();
 
 	void applyDifferenceToMe(const MTPDlangPackDifference &difference);
 	void reset(const Language &language);

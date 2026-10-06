@@ -270,6 +270,15 @@ std::pair<Languages, Languages> PrepareLists() {
 	};
 	const auto current = Lang::LanguageIdOrDefault(Lang::Id());
 	auto official = Lang::CurrentCloudManager().languageList();
+	if (ranges::find(official, u"ja"_q, projId) == end(official)) {
+		official.push_back({
+			u"ja"_q,
+			u"ja"_q,
+			QString(),
+			u"Japanese"_q,
+			u"日本語"_q,
+		});
+	}
 	auto recent = Local::readRecentLanguages();
 	ranges::stable_partition(recent, [&](const Language &language) {
 		return (language.id == current);
