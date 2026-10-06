@@ -74,6 +74,7 @@ void TakeoutSession::acquire(std::shared_ptr<Lease> lease) {
 	if (_finishing
 		|| ((_initializing || _takeoutId) && !compatible(*lease))) {
 		_queued.push_back(std::move(lease));
+		notifyWaiting(_queued.back(), true);
 		return;
 	}
 	_leases.push_back(std::move(lease));
@@ -84,11 +85,17 @@ void TakeoutSession::acquire(std::shared_ptr<Lease> lease) {
 		_sizeLimit = _leases.front()->sizeLimit;
 		_success = true;
 		initialize();
+	} else {
+		notifyWaiting(_leases.back(), false);
 	}
 }
 
 void TakeoutSession::initialize() {
 	_initializing = true;
+	const auto leases = _leases;
+	for (const auto &lease : leases) {
+		notifyWaiting(lease, false);
+	}
 	if (!_instance) {
 		initializationFailed(MTP::Error::Local(
 			u"EXPORT_SESSION_CLOSED"_q,
@@ -155,9 +162,22 @@ void TakeoutSession::initializationFailed(const MTP::Error &error) {
 	startQueued();
 }
 
+void TakeoutSession::notifyWaiting(
+		const std::shared_ptr<Lease> &lease,
+		bool waiting) {
+	lease->runner([=] {
+		if (!lease->cancelled && lease->waiting) {
+			lease->waiting(waiting);
+		}
+	});
+}
+
 void TakeoutSession::notifyReady(const std::shared_ptr<Lease> &lease) {
 	const auto id = *_takeoutId;
 	lease->runner([=] {
+		if (!lease->cancelled && lease->waiting) {
+			lease->waiting(false);
+		}
 		if (!lease->cancelled) {
 			base::take(lease->ready)(id);
 		}

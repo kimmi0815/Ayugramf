@@ -75,6 +75,8 @@ struct ProcessingState {
 	QString bytesName;
 	int64 bytesLoaded = 0;
 	int64 bytesCount = 0;
+	QString outputPath;
+	bool waitingForTakeout = false;
 };
 
 struct ApiErrorState {

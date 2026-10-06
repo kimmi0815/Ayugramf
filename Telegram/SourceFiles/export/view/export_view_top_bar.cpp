@@ -8,13 +8,14 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "export/view/export_view_top_bar.h"
 
 #include "export/view/export_view_content.h"
-#include "ui/rect.h"
+#include "lang/lang_keys.h"
 #include "ui/text/text_utilities.h"
+#include "ui/widgets/buttons.h"
 #include "ui/widgets/continuous_sliders.h"
 #include "ui/widgets/labels.h"
-#include "ui/widgets/buttons.h"
 #include "ui/widgets/shadow.h"
-#include "lang/lang_keys.h"
+#include "ui/rect.h"
+
 #include "styles/style_export.h"
 #include "styles/style_media_player.h"
 
@@ -86,7 +87,9 @@ void TopBar::updateData(Content &&content) {
 	}
 	const auto &row = content.rows[0];
 	_infoLeft->setMarkedText(
-		tr::lng_export_progress_title(tr::now, tr::bold)
+		tr::bold(content.title.isEmpty()
+			? tr::lng_export_progress_title(tr::now)
+			: content.title)
 			.append(' ')
 			.append(QChar(0x2013)));
 	_infoMiddle->setText(row.label);

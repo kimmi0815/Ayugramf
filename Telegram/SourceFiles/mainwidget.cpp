@@ -305,10 +305,11 @@ MainWidget::MainWidget(
 		floatPlayerClosed(itemId);
 	}, lifetime());
 
-	Core::App().exportManager().currentView(
-		&session()
-	) | rpl::on_next([=](Export::View::PanelController *view) {
-		setCurrentExportView(view);
+	rpl::combine(
+		Core::App().exportManager().jobs(&session()),
+		rpl::single(0) | rpl::then(Lang::Updated() | rpl::map_to(0))
+	) | rpl::on_next([=](const std::vector<Export::JobInfo> &jobs, int) {
+		setExportJobs(jobs);
 	}, lifetime());
 	if (_exportTopBar) {
 		_exportTopBar->finishAnimating();
@@ -1079,28 +1080,23 @@ void MainWidget::callTopBarHeightUpdated(int callTopBarHeight) {
 	}
 }
 
-void MainWidget::setCurrentExportView(Export::View::PanelController *view) {
-	_exportViewLifetime.destroy();
-	_currentExportView = view;
-	if (_currentExportView) {
-		_currentExportView->progressState(
-		) | rpl::on_next([=](Export::View::Content &&data) {
-			if (!data.rows.empty()
-				&& data.rows[0].id == Export::View::Content::kDoneId) {
-				LOG(("Export Info: Destroy top bar by Done."));
-				destroyExportTopBar();
-			} else if (!_exportTopBar) {
-				LOG(("Export Info: Create top bar by State."));
-				createExportTopBar(std::move(data));
-			} else {
-				_exportTopBar->entity()->updateData(std::move(data));
-			}
-		}, _exportViewLifetime);
-	} else {
-		_exportViewLifetime.destroy();
-
-		LOG(("Export Info: Destroy top bar by controller removal."));
+void MainWidget::setExportJobs(
+		const std::vector<Export::JobInfo> &jobs) {
+	if (jobs.empty()) {
 		destroyExportTopBar();
+		return;
+	}
+	auto content = Export::View::ContentFromJobs(jobs);
+	if (!_exportTopBar) {
+		createExportTopBar(std::move(content));
+	} else {
+		_exportTopBar->entity()->updateData(std::move(content));
+		if (_showAnimation) {
+			_exportTopBar->show(anim::type::instant);
+			_exportTopBar->setVisible(false);
+		} else {
+			_exportTopBar->show(anim::type::normal);
+		}
 	}
 }
 
@@ -1111,9 +1107,7 @@ void MainWidget::createExportTopBar(Export::View::Content &&data) {
 		_controller->adaptive().oneColumnValue());
 	_exportTopBar->entity()->clicks(
 	) | rpl::on_next([=] {
-		if (_currentExportView) {
-			_currentExportView->activatePanel();
-		}
+		_controller->show(Export::View::CreateJobsBox(&session()));
 	}, _exportTopBar->lifetime());
 	orderWidgets();
 	if (_showAnimation) {

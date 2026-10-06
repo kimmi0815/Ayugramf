@@ -18,6 +18,7 @@ void Require(bool condition, const std::string &message) {
 struct Job {
 	std::optional<uint64> id;
 	std::vector<std::string> errors;
+	std::vector<bool> waiting;
 	std::shared_ptr<Session::Lease> lease = std::make_shared<Session::Lease>();
 	std::deque<FnMut<void()>> callbacks;
 	bool deferCallbacks = false;
@@ -33,6 +34,7 @@ struct Job {
 			}
 		};
 		lease->ready = [=](uint64 value) { id = value; };
+		lease->waiting = [=](bool value) { waiting.push_back(value); };
 		lease->failed = [=](const MTP::Error &error) { errors.push_back(error.name); };
 	}
 
@@ -196,10 +198,94 @@ void CancelledReadyCallbackCannotReviveJob() {
 	auto first = Job(Flag::f_message_channels, 0);
 	first.deferCallbacks = true;
 	fixture.session->acquire(first.lease);
-	Require(first.callbacks.size() == 1, "ready callback was not queued");
+	Require(first.callbacks.size() == 2, "initializing and ready callbacks were not queued");
 	fixture.session->release(first.lease, false);
 	first.drain();
 	Require(!first.id, "late ready callback revived a cancelled job");
+	Require(first.waiting.empty(), "cancelled job received waiting callbacks");
+}
+
+void QueuedWaitingClearsBeforeInitializationCompletes() {
+	auto fixture = Fixture();
+	auto first = Job(Flag::f_message_channels, 0);
+	auto queued = Job(Flag::f_contacts, 0);
+	fixture.session->acquire(first.lease);
+	fixture.session->acquire(queued.lease);
+	Require(queued.waiting == std::vector<bool>{ true }, "queued lease did not report waiting");
+	fixture.server.defer = true;
+	fixture.session->release(first.lease, true);
+	Require(fixture.server.drainOne(), "prior finish response was not pending");
+	Require(queued.waiting == std::vector<bool>{ true, false },
+		"promoted lease did not clear waiting before initialization response");
+	Require(!queued.id, "promoted lease completed initialization prematurely");
+	fixture.server.drain();
+	fixture.requireValid(queued);
+	Require(!queued.waiting.back(), "ready lease retained waiting state");
+}
+
+void CompatiblePendingAndReadyLeasesNeverReportWaiting() {
+	auto fixture = Fixture();
+	fixture.server.defer = true;
+	auto first = Job(Flag::f_message_channels, 0);
+	auto joined = Job(Flag::f_message_channels, 0);
+	fixture.session->acquire(first.lease);
+	fixture.session->acquire(joined.lease);
+	Require(first.waiting == std::vector<bool>{ false }, "initializing lease reported waiting");
+	Require(joined.waiting == first.waiting, "compatible initializing lease reported waiting");
+	fixture.server.drain();
+	fixture.server.defer = false;
+	auto ready = Job(Flag::f_message_channels, 0);
+	fixture.session->acquire(ready.lease);
+	Require(ready.waiting == std::vector<bool>{ false }, "compatible ready lease reported waiting");
+	Require(std::ranges::none_of(first.waiting, [](bool value) { return value; }),
+		"initial lease ever reported queue waiting");
+	Require(std::ranges::none_of(joined.waiting, [](bool value) { return value; }),
+		"joined lease ever reported queue waiting");
+}
+
+void CancelledQueuedWaitingNotificationIsSuppressed() {
+	auto fixture = Fixture();
+	auto first = Job(Flag::f_message_channels, 0);
+	auto queued = Job(Flag::f_contacts, 0);
+	queued.deferCallbacks = true;
+	fixture.session->acquire(first.lease);
+	fixture.session->acquire(queued.lease);
+	Require(queued.callbacks.size() == 1, "queued waiting callback was not dispatched through runner");
+	Require(queued.waiting.empty(), "queued waiting bypassed runner");
+	fixture.session->release(queued.lease, false);
+	queued.drain();
+	Require(queued.waiting.empty(), "cancelled lease received queued waiting notification");
+	fixture.session->release(first.lease, true);
+	Require(!queued.id, "cancelled waiting lease was promoted");
+	Require(fixture.server.initializations.size() == 1, "cancelled waiting lease initialized");
+}
+
+void WaitingCallbackCanCancelBeforeReady() {
+	auto fixture = Fixture();
+	auto first = Job(Flag::f_message_channels, 0);
+	first.lease->waiting = [&](bool waiting) {
+		Require(!waiting, "first lease unexpectedly queued");
+		fixture.session->release(first.lease, false);
+	};
+	fixture.session->acquire(first.lease);
+	Require(!first.id, "waiting callback cancellation delivered ready");
+	Require(!fixture.server.active, "waiting callback cancellation leaked takeout");
+	Require(fixture.server.finishes.size() == 1, "cancelled initialization was not cleaned up");
+}
+
+void WaitingCallbackCanCancelCompatibleReadyLease() {
+	auto fixture = Fixture();
+	auto first = Job(Flag::f_message_channels, 0);
+	auto joined = Job(Flag::f_message_channels, 0);
+	fixture.session->acquire(first.lease);
+	joined.lease->waiting = [&](bool waiting) {
+		Require(!waiting, "compatible ready lease unexpectedly queued");
+		fixture.session->release(joined.lease, false);
+	};
+	fixture.session->acquire(joined.lease);
+	Require(!joined.id, "waiting callback cancellation still delivered ready");
+	Require(fixture.server.finishes.empty(), "joined waiting cancellation finished survivor");
+	fixture.requireValid(first);
 }
 
 void FreshAccountGetsFreshCoordinatorAndCallbacksDieWithOwner() {
@@ -215,6 +301,7 @@ void FreshAccountGetsFreshCoordinatorAndCallbacksDieWithOwner() {
 	first.drain();
 	Require(!firstSession, "coordinator outlived owning account session");
 	Require(!first.id, "owner destruction delivered stale ready callback");
+	Require(first.waiting.empty(), "owner destruction delivered stale waiting callback");
 	Require(!server.active, "owner destruction left an active takeout");
 	auto secondOwner = Main::Session(server);
 	const auto secondSession = Session::ForSession(&secondOwner);
@@ -412,6 +499,11 @@ int main(int argc, char **argv) {
 		{ "queued_cancellation_is_independent", QueuedCancellationCannotStartOrAffectActiveJob },
 		{ "pending_cancellation_cleans_returned_session", PendingCancellationCleansReturnedSession },
 		{ "late_ready_callback_cannot_revive_job", CancelledReadyCallbackCannotReviveJob },
+		{ "queued_waiting_clears_before_initialization", QueuedWaitingClearsBeforeInitializationCompletes },
+		{ "compatible_leases_never_report_waiting", CompatiblePendingAndReadyLeasesNeverReportWaiting },
+		{ "cancelled_waiting_notification_is_suppressed", CancelledQueuedWaitingNotificationIsSuppressed },
+		{ "waiting_callback_can_cancel_before_ready", WaitingCallbackCanCancelBeforeReady },
+		{ "waiting_callback_can_cancel_compatible_ready", WaitingCallbackCanCancelCompatibleReadyLease },
 		{ "fresh_account_and_owner_lifetime", FreshAccountGetsFreshCoordinatorAndCallbacksDieWithOwner },
 		{ "owner_destruction_before_init_delivery", OwnerDestructionAfterServerInitBeforeDeliveryCleansTakeout },
 		{ "reentrant_ready_release", ReentrantReadyCanReleaseWithoutInvalidatingOtherLeases },

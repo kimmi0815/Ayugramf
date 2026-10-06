@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "export/view/export_view_content.h"
 
+#include "export/export_manager.h"
 #include "export/export_settings.h"
 #include "lang/lang_keys.h"
 #include "ui/text/format_values.h"
@@ -71,7 +72,9 @@ Content ContentFromState(
 	};
 	switch (state.step) {
 	case Step::Initializing:
-		pushMain(tr::lng_export_state_initializing(tr::now));
+		pushMain(state.waitingForTakeout
+			? tr::lng_export_jobs_waiting(tr::now)
+			: tr::lng_export_state_initializing(tr::now));
 		break;
 	case Step::DialogsList:
 		pushMain(tr::lng_export_state_chats_list(tr::now));
@@ -190,6 +193,43 @@ Content ContentFromState(const FinishedState &state) {
 			Ui::FormatSizeText(state.bytesCount)),
 		QString(),
 		1. });
+	return result;
+}
+
+Content ContentFromJob(const JobInfo &job) {
+	if (const auto processing = std::get_if<ProcessingState>(&job.state)) {
+		auto settings = Settings();
+		return ContentFromState(&settings, *processing);
+	} else if (const auto finished = std::get_if<FinishedState>(&job.state)) {
+		return ContentFromState(*finished);
+	}
+
+	auto result = Content();
+	const auto label = v::is<ApiErrorState>(job.state)
+		|| v::is<OutputErrorState>(job.state)
+		? tr::lng_export_jobs_failed(tr::now)
+		: v::is<CancelledState>(job.state)
+		? tr::lng_export_jobs_cancelled(tr::now)
+		: tr::lng_export_jobs_settings(tr::now);
+	result.rows.push_back({ .label = label });
+	return result;
+}
+
+Content ContentFromJobs(const std::vector<JobInfo> &jobs) {
+	auto result = Content();
+	if (jobs.empty()) {
+		return result;
+	}
+	result.title = tr::lng_export_jobs_title(tr::now);
+	auto progress = 0.;
+	for (const auto &job : jobs) {
+		progress += ContentFromJob(job).rows.front().progress;
+	}
+	result.rows.push_back({
+		.label = tr::lng_export_jobs_count(tr::now, lt_count, jobs.size()),
+		.info = tr::lng_export_jobs_show_all(tr::now),
+		.progress = progress / jobs.size(),
+	});
 	return result;
 }
 

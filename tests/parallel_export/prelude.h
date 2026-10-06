@@ -23,8 +23,20 @@
 
 using gsl::not_null;
 using int32 = std::int32_t;
+using int64 = std::int64_t;
 using uint64 = std::uint64_t;
 using QString = std::string;
+
+inline QString operator""_q(const char16_t *value, std::size_t size) {
+	auto result = QString();
+	for (auto i = std::size_t(0); i != size; ++i) {
+		if (value[i] > 0x7F) {
+			throw std::runtime_error("QString literal shim accepts ASCII only");
+		}
+		result.push_back(char(value[i]));
+	}
+	return result;
+}
 
 template <typename Signature>
 using Fn = std::function<Signature>;

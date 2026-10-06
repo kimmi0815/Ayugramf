@@ -62,9 +62,13 @@ private:
 
 class PeerData {
 public:
-	PeerData(not_null<Main::Session*> session, uint64 peerId);
+	PeerData(
+		not_null<Main::Session*> session,
+		uint64 peerId,
+		QString name = {});
 	Main::Session &session() const;
 	MTPInputPeer input() const;
+	const QString &name() const;
 
 	struct Id {
 		uint64 value = 0;
@@ -73,6 +77,7 @@ public:
 
 private:
 	const not_null<Main::Session*> _session;
+	QString _name;
 
 };
 
@@ -83,14 +88,56 @@ class TakeoutSession;
 struct PasswordCheckState {
 };
 struct ProcessingState {
+	enum class Step {
+		Initializing,
+		DialogsList,
+		PersonalInfo,
+		Userpics,
+		Stories,
+		ProfileMusic,
+		Contacts,
+		Sessions,
+		OtherData,
+		Dialogs,
+		Topic,
+	};
+	enum class EntityType {
+		Chat,
+		SavedMessages,
+		RepliesMessages,
+		VerifyCodes,
+		Topic,
+		Other,
+	};
+
+	Step step = Step::Initializing;
+	int substepsPassed = 0;
+	int substepsNow = 0;
+	int substepsTotal = 0;
+	EntityType entityType = EntityType::Other;
+	QString entityName;
+	int entityIndex = 0;
+	int entityCount = 0;
+	int itemIndex = 0;
+	int itemCount = 0;
+	uint64 bytesRandomId = 0;
+	QString bytesName;
+	int64 bytesLoaded = 0;
+	int64 bytesCount = 0;
+	QString outputPath;
+	bool waitingForTakeout = false;
 };
 struct FinishedState {
+	QString path;
+	int filesCount = 0;
+	int64 bytesCount = 0;
 };
 struct CancelledState {
 };
 struct ApiErrorState {
 };
 struct OutputErrorState {
+	QString path;
 };
 
 using State = std::variant<

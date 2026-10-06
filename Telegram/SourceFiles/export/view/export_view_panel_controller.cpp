@@ -7,24 +7,28 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "export/view/export_view_panel_controller.h"
 
-#include "export/view/export_view_settings.h"
+#include "base/platform/base_platform_info.h"
+#include "base/qt/qt_common_adapters.h"
+#include "base/unixtime.h"
+#include "boxes/abstract_box.h" // Ui::show().
+#include "core/application.h"
+#include "core/file_utilities.h"
+#include "data/data_session.h"
 #include "export/view/export_view_progress.h"
+#include "export/view/export_view_settings.h"
 #include "export/export_manager.h"
+#include "lang/lang_keys.h"
+#include "main/main_account.h"
+#include "main/main_session.h"
+#include "mtproto/mtproto_config.h"
+#include "storage/storage_account.h"
+#include "ui/boxes/confirm_box.h"
+#include "ui/widgets/buttons.h"
 #include "ui/widgets/labels.h"
 #include "ui/widgets/separate_panel.h"
 #include "ui/wrap/padding_wrap.h"
-#include "mtproto/mtproto_config.h"
-#include "ui/boxes/confirm_box.h"
-#include "lang/lang_keys.h"
-#include "storage/storage_account.h"
-#include "core/application.h"
-#include "core/file_utilities.h"
-#include "main/main_session.h"
-#include "data/data_session.h"
-#include "base/platform/base_platform_info.h"
-#include "base/unixtime.h"
-#include "base/qt/qt_common_adapters.h"
-#include "boxes/abstract_box.h" // Ui::show().
+#include "ui/wrap/vertical_layout.h"
+
 #include "styles/style_export.h"
 #include "styles/style_layers.h"
 
@@ -33,6 +37,191 @@ namespace View {
 namespace {
 
 constexpr auto kSaveSettingsTimeout = crl::time(1000);
+
+class JobProgress final : public Ui::RpWidget {
+public:
+	explicit JobProgress(QWidget *parent) : RpWidget(parent) {
+		setFixedHeight(st::exportProgressWidth);
+	}
+
+	void setProgress(float64 value) {
+		const auto progress = std::clamp(value, 0., 1.);
+		if (_progress != progress) {
+			_progress = progress;
+			update();
+		}
+	}
+
+protected:
+	void paintEvent(QPaintEvent *e) override {
+		auto p = QPainter(this);
+		p.fillRect(rect(), st::exportProgressBg);
+		p.fillRect(
+			QRect(0, 0, qRound(width() * _progress), height()),
+			st::exportProgressFg);
+	}
+
+private:
+	float64 _progress = 0.;
+
+};
+
+class JobRow final : public Ui::VerticalLayout {
+public:
+	JobRow(
+		QWidget *parent,
+		not_null<Main::Session*> session,
+		uint64 id)
+	: VerticalLayout(parent) {
+		_title = add(
+			object_ptr<Ui::FlatLabel>(this, QString(), st::exportProgressLabel),
+			st::exportJobsRowPadding);
+		_title->setElisionMiddle(true);
+		_status = add(
+			object_ptr<Ui::FlatLabel>(this, QString(), st::exportAboutLabel),
+			st::exportJobsDetailsPadding);
+		_progress = add(
+			object_ptr<JobProgress>(this),
+			st::exportJobsDetailsPadding,
+			style::al_justify);
+		const auto open = add(
+			object_ptr<Ui::LinkButton>(
+				this,
+				tr::lng_export_jobs_open(tr::now)),
+			st::exportJobsActionPadding);
+		open->setClickedCallback([=] {
+			Core::App().exportManager().activate(id, session);
+		});
+		tr::lng_export_jobs_open(
+		) | rpl::on_next([=](const QString &text) {
+			open->setText(text);
+		}, open->lifetime());
+	}
+
+	void updateData(const JobInfo &job) {
+		const auto title = job.title.isEmpty()
+			? tr::lng_export_title(tr::now)
+			: job.title;
+		if (_titleText != title) {
+			_titleText = title;
+			_title->setText(title);
+		}
+		const auto content = ContentFromJob(job);
+		auto text = QString();
+		for (const auto &row : content.rows) {
+			if (row.label.isEmpty()) {
+				continue;
+			}
+			if (!text.isEmpty()) {
+				text += '\n';
+			}
+			text += row.label;
+			if (!row.info.isEmpty()) {
+				text += u"  "_q + row.info;
+			}
+		}
+		auto path = QString();
+		if (const auto processing = std::get_if<ProcessingState>(&job.state)) {
+			path = processing->outputPath;
+		} else if (const auto finished = std::get_if<FinishedState>(&job.state)) {
+			path = finished->path;
+		}
+		if (!path.isEmpty()) {
+			text += '\n' + tr::lng_export_option_location(
+				tr::now,
+				lt_path,
+				path);
+		}
+		if (_statusText != text) {
+			_statusText = text;
+			_status->setText(text);
+		}
+		_progress->setProgress(content.rows.front().progress);
+	}
+
+private:
+	QPointer<Ui::FlatLabel> _title;
+	QPointer<Ui::FlatLabel> _status;
+	QPointer<JobProgress> _progress;
+	QString _titleText;
+	QString _statusText;
+
+};
+
+class JobsBox final : public Ui::BoxContent {
+public:
+	JobsBox(QWidget*, not_null<Main::Session*> session)
+	: _session(session) {
+	}
+
+protected:
+	void prepare() override {
+		setTitle(tr::lng_export_jobs_title());
+		addButton(tr::lng_close(), [=] { closeBox(); });
+		_body = setInnerWidget(object_ptr<Ui::VerticalLayout>(this));
+		_empty = _body->add(
+			object_ptr<Ui::FlatLabel>(
+				_body,
+				QString(),
+				st::exportAboutLabel),
+			st::exportJobsRowPadding);
+		setDimensions(st::boxWideWidth, st::exportJobsMaxHeight);
+		_body->heightValue(
+		) | rpl::on_next([=](int height) {
+			setDimensions(
+				st::boxWideWidth,
+				std::min(height, st::exportJobsMaxHeight));
+		}, lifetime());
+		rpl::combine(
+			Core::App().exportManager().jobs(_session),
+			rpl::single(0) | rpl::then(Lang::Updated() | rpl::map_to(0))
+		) | rpl::on_next([=](const std::vector<JobInfo> &jobs, int) {
+			updateJobs(jobs);
+		}, lifetime());
+		_session->account().sessionChanges(
+		) | rpl::on_next([=](Main::Session *session) {
+			if (session != _session) {
+				closeBox();
+			}
+		}, lifetime());
+	}
+
+private:
+	void updateJobs(const std::vector<JobInfo> &jobs) {
+		for (auto i = begin(_rows); i != end(_rows);) {
+			const auto exists = ranges::find_if(jobs, [&](const JobInfo &job) {
+				return job.id == i->first;
+			}) != end(jobs);
+			if (exists) {
+				++i;
+			} else {
+				const auto row = i->second;
+				i = _rows.erase(i);
+				delete row.data();
+			}
+		}
+		for (const auto &job : jobs) {
+			auto i = _rows.find(job.id);
+			if (i == end(_rows)) {
+				const auto row = _body->add(object_ptr<JobRow>(
+					_body,
+					_session,
+					job.id));
+				i = _rows.emplace(job.id, row).first;
+			}
+			i->second->updateData(job);
+		}
+		_empty->setText(jobs.empty()
+			? tr::lng_export_jobs_empty(tr::now)
+			: QString());
+	}
+
+	const not_null<Main::Session*> _session;
+	QPointer<Ui::VerticalLayout> _body;
+	QPointer<Ui::FlatLabel> _empty;
+	base::flat_map<uint64, QPointer<JobRow>> _rows;
+
+};
 
 class SuggestBox : public Ui::BoxContent {
 public:
@@ -82,6 +271,10 @@ void SuggestBox::prepare() {
 }
 
 } // namespace
+
+object_ptr<Ui::BoxContent> CreateJobsBox(not_null<Main::Session*> session) {
+	return Box<JobsBox>(session);
+}
 
 Environment PrepareEnvironment(not_null<Main::Session*> session) {
 	auto result = Environment();

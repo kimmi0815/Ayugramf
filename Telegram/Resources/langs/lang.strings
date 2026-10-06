@@ -7284,6 +7284,17 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 "lng_export_title" = "Export Your Data";
 "lng_export_progress_title" = "Exporting your data";
+
+"lng_export_jobs_title" = "Exports";
+"lng_export_jobs_count#one" = "{count} export";
+"lng_export_jobs_count#other" = "{count} exports";
+"lng_export_jobs_show_all" = "View all progress";
+"lng_export_jobs_waiting" = "Waiting for another export to finish. This export will start automatically.";
+"lng_export_jobs_open" = "Open details";
+"lng_export_jobs_settings" = "Choose export settings";
+"lng_export_jobs_failed" = "Export failed";
+"lng_export_jobs_cancelled" = "Export stopped";
+"lng_export_jobs_empty" = "No exports";
 "lng_export_option_info" = "Account information";
 "lng_export_option_info_about" = "Your chosen display name, username, phone number and profile photos.";
 "lng_export_option_contacts" = "Contacts list";

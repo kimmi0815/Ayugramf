@@ -57,9 +57,9 @@ struct TrackState;
 } // namespace Media
 
 namespace Export {
+struct JobInfo;
 namespace View {
 class TopBar;
-class PanelController;
 struct Content;
 } // namespace View
 } // namespace Export
@@ -260,7 +260,7 @@ private:
 	void destroyCallTopBar();
 	void callTopBarHeightUpdated(int callTopBarHeight);
 
-	void setCurrentExportView(Export::View::PanelController *view);
+	void setExportJobs(const std::vector<Export::JobInfo> &jobs);
 	void createExportTopBar(Export::View::Content &&data);
 	void destroyExportTopBar();
 	void exportTopBarHeightUpdated();
@@ -361,10 +361,8 @@ private:
 	rpl::lifetime _currentCallLifetime;
 	object_ptr<Ui::SlideWrap<Calls::TopBar>> _callTopBar = { nullptr };
 
-	Export::View::PanelController *_currentExportView = nullptr;
 	object_ptr<Window::TopBarWrapWidget<Export::View::TopBar>> _exportTopBar
 		= { nullptr };
-	rpl::lifetime _exportViewLifetime;
 
 	object_ptr<Window::TopBarWrapWidget<Media::Player::Widget>> _player
 		= { nullptr };

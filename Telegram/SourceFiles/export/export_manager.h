@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include "export/export_controller.h"
+
 class PeerData;
 
 namespace Ui {
@@ -20,6 +22,12 @@ class Session;
 namespace Export {
 
 class Controller;
+
+struct JobInfo {
+	uint64 id = 0;
+	QString title;
+	State state;
+};
 
 namespace View {
 class PanelController;
@@ -41,6 +49,9 @@ public:
 
 	[[nodiscard]] rpl::producer<View::PanelController*> currentView(
 		Main::Session *session = nullptr) const;
+	[[nodiscard]] rpl::producer<std::vector<JobInfo>> jobs(
+		not_null<Main::Session*> session) const;
+	void activate(uint64 id, not_null<Main::Session*> session);
 	[[nodiscard]] bool inProgress() const;
 	[[nodiscard]] bool inProgress(not_null<Main::Session*> session) const;
 	void stopWithConfirmation(
@@ -63,6 +74,7 @@ private:
 	std::vector<std::unique_ptr<Job>> _jobs;
 	uint64 _nextId = 0;
 	rpl::event_stream<> _viewChanges;
+	rpl::event_stream<> _jobChanges;
 
 };
 

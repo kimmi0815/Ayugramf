@@ -784,6 +784,10 @@ rpl::producer<Output::Result> ApiWrap::ioErrors() const {
 	return _ioErrors.events();
 }
 
+rpl::producer<bool> ApiWrap::waitingForTakeout() const {
+	return _waitingForTakeoutChanges.events();
+}
+
 void ApiWrap::startExport(
 		const Settings &settings,
 		Output::Stats *stats,
@@ -1098,6 +1102,11 @@ void ApiWrap::startMainSession(FnMut<void()> done) {
 		lease->flags = flags;
 		lease->sizeLimit = sizeLimit;
 		lease->runner = _runner;
+		lease->waiting = [=](bool waiting) {
+			if (!_cancelled) {
+				_waitingForTakeoutChanges.fire_copy(waiting);
+			}
+		};
 		lease->ready = [=, done = std::move(done)](uint64 id) mutable {
 			if (!_cancelled) {
 				_takeoutId = id;

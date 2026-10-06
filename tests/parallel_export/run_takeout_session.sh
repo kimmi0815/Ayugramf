@@ -13,6 +13,7 @@ python3 "$test_root/extract_takeout_api.py" --factory \
   -I "$test_build" \
   -I "$test_root/takeout_stubs" \
   -I "$test_root" \
+  -I "$repo_root/Telegram/lib_rpl" \
   -I "$repo_root/Telegram/lib_base" \
   -I "$repo_root/Telegram/ThirdParty/GSL/include" \
   -I "$repo_root/Telegram/SourceFiles" \

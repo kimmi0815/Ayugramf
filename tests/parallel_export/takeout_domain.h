@@ -14,10 +14,16 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
+
+#if defined(_LIBCPP_VERSION) && !defined(_LIBCPP_TEMPLATE_VIS)
+#define _LIBCPP_TEMPLATE_VIS
+#endif
 
 #include <gsl/gsl>
 #include "base/flags.h"
+#include "rpl/rpl.h"
 
 using int32 = std::int32_t;
 using int64 = std::int64_t;
@@ -110,6 +116,14 @@ inline QString operator"" _q(const char16_t *text, std::size_t size) {
 }
 
 namespace base {
+
+namespace assertion {
+
+inline void log(const char *message, const char *file, int line) {
+	std::cerr << file << ':' << line << ": " << message << '\n';
+}
+
+}
 
 template <typename Type>
 class weak_qptr {
@@ -514,6 +528,7 @@ public:
 #endif
 
 	void startMainSession(FnMut<void()> done);
+	rpl::producer<bool> waitingForTakeout() const;
 	void finishExport(FnMut<void()> done);
 	void cancelExportFast();
 	bool probe();
@@ -534,6 +549,7 @@ private:
 		void fire_copy(const MTP::Error &error) { values.push_back(error.name); }
 	};
 	ErrorStream _errors = { errors };
+	rpl::event_stream<bool> _waitingForTakeoutChanges;
 	std::unique_ptr<MTP::ConcurrentSender> _mtp;
 	base::weak_qptr<TakeoutSession> _takeoutSession;
 	Fn<void(FnMut<void()>)> _runner;

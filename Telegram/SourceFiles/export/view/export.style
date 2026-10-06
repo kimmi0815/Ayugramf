@@ -95,6 +95,10 @@ exportTopBarLabel: FlatLabel(defaultFlatLabel) {
 		linkFg: windowSubTextFg;
 	}
 }
+exportJobsMaxHeight: 400px;
+exportJobsRowPadding: margins(22px, 16px, 22px, 8px);
+exportJobsDetailsPadding: margins(22px, 0px, 22px, 8px);
+exportJobsActionPadding: margins(22px, 0px, 22px, 16px);
 exportCalendarSizes: CalendarSizes(defaultCalendarSizes) {
 	width: 320px;
 	daysHeight: 40px;

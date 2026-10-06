@@ -7,10 +7,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
-#include "export/export_controller.h"
-#include "export/view/export_view_content.h"
-#include "base/unique_qptr.h"
+#include "base/object_ptr.h"
 #include "base/timer.h"
+#include "base/unique_qptr.h"
+#include "export/view/export_view_content.h"
+#include "export/export_controller.h"
 
 namespace Ui {
 class SeparatePanel;
@@ -25,6 +26,8 @@ namespace Export {
 namespace View {
 
 base::weak_qptr<Ui::BoxContent> SuggestStart(not_null<Main::Session*> session);
+[[nodiscard]] object_ptr<Ui::BoxContent> CreateJobsBox(
+	not_null<Main::Session*> session);
 void ClearSuggestStart(not_null<Main::Session*> session);
 bool IsDefaultPath(not_null<Main::Session*> session, const QString &path);
 void ResolveSettings(not_null<Main::Session*> session, Settings &settings);

@@ -42,6 +42,16 @@
     "lng_box_yes",
     "lng_close",
     "lng_collectible_learn_more",
+    "lng_export_jobs_cancelled",
+    "lng_export_jobs_count#one",
+    "lng_export_jobs_count#other",
+    "lng_export_jobs_empty",
+    "lng_export_jobs_failed",
+    "lng_export_jobs_open",
+    "lng_export_jobs_settings",
+    "lng_export_jobs_show_all",
+    "lng_export_jobs_title",
+    "lng_export_jobs_waiting",
     "lng_group_invite_context_qr",
     "lng_intro_qr_phone",
     "lng_language_name",
@@ -124,5 +134,5 @@
     "lng_sure_save_language",
     "lng_username_copied"
   ],
-  "bundled_core_keys": 822
+  "bundled_core_keys": 832
 }

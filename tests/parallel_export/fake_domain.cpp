@@ -47,9 +47,13 @@ rpl::lifetime &Main::Session::lifetime() {
 	return _lifetime;
 }
 
-PeerData::PeerData(not_null<Main::Session*> session, uint64 peerId)
+PeerData::PeerData(
+		not_null<Main::Session*> session,
+		uint64 peerId,
+		QString name)
 : id{ peerId }
-, _session(session) {
+, _session(session)
+, _name(std::move(name)) {
 	session->data().add(this);
 }
 
@@ -59,6 +63,10 @@ Main::Session &PeerData::session() const {
 
 MTPInputPeer PeerData::input() const {
 	return { id.value };
+}
+
+const QString &PeerData::name() const {
+	return _name;
 }
 
 Export::Controller::Controller(

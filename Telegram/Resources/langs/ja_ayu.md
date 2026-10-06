@@ -20,7 +20,7 @@ normal language-pack cache path.
 
 Two resources provide local defaults before any network response:
 
-- `ja_core.strings`: 822 existing Telegram Desktop keys. They cover the QR and
+- `ja_core.strings`: 832 Telegram Desktop and fork keys. They cover the QR and
   phone login screens, main settings categories and common settings, chat-list
   text, language selection, common dialogs, and the macOS application menus.
 - `ja_ayu.strings`: all 411 AyuGram keys declared in `lang.strings`, plus the four
@@ -38,9 +38,10 @@ Japanese TDesktop translation pages: Settings (first 200 rows), Log In,
 Chat List, and General (first 400 rows). It excludes unapproved suggestions,
 unknown keys, and one entry whose placeholders no longer match the checkout
 (`lng_local_storage_cleared`). This yielded 769 known keys before supplements.
-86 local supplements complete important menus and settings and replace some
-snapshot wording; the final resource contains 736 snapshot values and 86 local
-values. Japanese `#other` values are used for both existing `#one` and `#other`
+96 local supplements complete important menus and settings and replace some
+snapshot wording; the final resource contains 736 snapshot values and 96 local
+values. Ten local keys cover the parallel-export list, job count, waiting,
+settings, failure and completion controls. Japanese `#other` values are used for both existing `#one` and `#other`
 keys. Every declared placeholder is preserved.
 
 `ja_core.sources.json` records retrieval date, page URLs, offsets, SHA-256 hashes

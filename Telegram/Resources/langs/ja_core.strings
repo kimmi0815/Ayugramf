@@ -820,3 +820,13 @@
 "lng_willbe_history" = "チャットを選択するとここに表示されます";
 "lng_wnd_menu_redo" = "やり直す";
 "lng_wnd_menu_undo" = "元に戻す";
+"lng_export_jobs_title" = "エクスポート";
+"lng_export_jobs_count#one" = "{count}件のエクスポート";
+"lng_export_jobs_count#other" = "{count}件のエクスポート";
+"lng_export_jobs_show_all" = "全件の進捗を見る";
+"lng_export_jobs_waiting" = "待機中です。先行するエクスポートが終わると自動で開始します。";
+"lng_export_jobs_open" = "詳細を開く";
+"lng_export_jobs_settings" = "エクスポートの設定待ち";
+"lng_export_jobs_failed" = "エクスポートに失敗しました";
+"lng_export_jobs_cancelled" = "エクスポートを停止しました";
+"lng_export_jobs_empty" = "エクスポートはありません";

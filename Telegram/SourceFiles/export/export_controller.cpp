@@ -69,6 +69,7 @@ private:
 
 	[[nodiscard]] bool stopped() const;
 	void setState(State &&state);
+	void waitingForTakeoutChanged(bool waiting);
 	void ioError(const QString &path);
 	bool ioCatchError(Output::Result result);
 	void setFinishedState();
@@ -175,6 +176,11 @@ ControllerObject::ControllerObject(
 		ioCatchError(result);
 	}, _lifetime);
 
+	_api.waitingForTakeout(
+	) | rpl::on_next([=](bool waiting) {
+		waitingForTakeoutChanged(waiting);
+	}, _lifetime);
+
 	//requestPasswordState();
 	auto state = PasswordCheckState();
 	state.checked = false;
@@ -204,6 +210,11 @@ ControllerObject::ControllerObject(
 	_api.ioErrors(
 	) | rpl::on_next([=](const Output::Result &result) {
 		ioCatchError(result);
+	}, _lifetime);
+
+	_api.waitingForTakeout(
+	) | rpl::on_next([=](bool waiting) {
+		waitingForTakeoutChanged(waiting);
 	}, _lifetime);
 
 	//requestPasswordState();
@@ -239,8 +250,23 @@ void ControllerObject::setState(State &&state) {
 	if (v::is<ApiErrorState>(state) || v::is<OutputErrorState>(state)) {
 		_api.cancelExportFast();
 	}
+	if (const auto processing = std::get_if<ProcessingState>(&state)) {
+		processing->outputPath = _settings.path;
+	}
 	_state = std::move(state);
 	_stateChanges.fire_copy(_state);
+}
+
+void ControllerObject::waitingForTakeoutChanged(bool waiting) {
+	const auto processing = std::get_if<ProcessingState>(&_state);
+	if (!processing
+		|| processing->step != Step::Initializing
+		|| processing->waitingForTakeout == waiting) {
+		return;
+	}
+	auto state = *processing;
+	state.waitingForTakeout = waiting;
+	setState(std::move(state));
 }
 
 void ControllerObject::ioError(const QString &path) {

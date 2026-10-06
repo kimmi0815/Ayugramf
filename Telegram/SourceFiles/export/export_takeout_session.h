@@ -26,6 +26,7 @@ public:
 		MTPaccount_InitTakeoutSession::Flags flags;
 		int64 sizeLimit = 0;
 		Fn<void(FnMut<void()>)> runner;
+		Fn<void(bool)> waiting;
 		FnMut<void(uint64)> ready;
 		Fn<void(const MTP::Error&)> failed;
 		std::atomic<bool> cancelled = false;
@@ -50,6 +51,7 @@ private:
 	void initialize();
 	void initialized(uint64 id);
 	void initializationFailed(const MTP::Error &error);
+	void notifyWaiting(const std::shared_ptr<Lease> &lease, bool waiting);
 	void notifyReady(const std::shared_ptr<Lease> &lease);
 	void finish(std::shared_ptr<Lease> lease, FnMut<void()> done);
 	void finished();

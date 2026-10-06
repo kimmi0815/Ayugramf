@@ -50,6 +50,7 @@ public:
 
 	rpl::producer<MTP::Error> errors() const;
 	rpl::producer<Output::Result> ioErrors() const;
+	rpl::producer<bool> waitingForTakeout() const;
 
 	struct StartInfo {
 		int userpicsCount = 0;
@@ -362,6 +363,7 @@ private:
 
 	rpl::event_stream<MTP::Error> _errors;
 	rpl::event_stream<Output::Result> _ioErrors;
+	rpl::event_stream<bool> _waitingForTakeoutChanges;
 
 };
 

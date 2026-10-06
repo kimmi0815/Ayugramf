@@ -46,6 +46,8 @@ struct Manager::Job {
 	Main::Session *session = nullptr;
 	uint64 peerId = 0;
 	int32 topicRootId = 0;
+	QString title;
+	State state;
 	bool processing = false;
 	bool finished = false;
 	std::unique_ptr<Controller> controller;
@@ -76,6 +78,7 @@ void Manager::startTopic(
 	job->session = session;
 	job->peerId = peerId;
 	job->topicRootId = rootId;
+	job->title = peer->name() + u" / "_q + topicTitle;
 	job->controller = std::make_unique<Controller>(
 		&session->mtp(),
 		TakeoutSession::ForSession(session),
@@ -99,6 +102,7 @@ void Manager::start(
 	job->id = ++_nextId;
 	job->session = session;
 	job->peerId = peerId;
+	job->title = peer ? peer->name() : QString();
 	job->controller = std::make_unique<Controller>(
 		&session->mtp(),
 		TakeoutSession::ForSession(session),
@@ -141,6 +145,7 @@ void Manager::setupPanel(std::unique_ptr<Job> job) {
 	}, job->controller->lifetime());
 	job->controller->state(
 	) | rpl::on_next([=](const State &state) {
+		entry->state = state;
 		const auto processing = v::is<ProcessingState>(state);
 		const auto finished = v::is<FinishedState>(state)
 			|| v::is<CancelledState>(state)
@@ -151,9 +156,11 @@ void Manager::setupPanel(std::unique_ptr<Job> job) {
 			entry->finished = finished;
 			_viewChanges.fire({});
 		}
+		_jobChanges.fire({});
 	}, job->controller->lifetime());
 	_jobs.push_back(std::move(job));
 	_viewChanges.fire({});
+	_jobChanges.fire({});
 }
 
 View::PanelController *Manager::currentPanel(
@@ -185,6 +192,28 @@ rpl::producer<View::PanelController*> Manager::currentView(
 	return _viewChanges.events_starting_with({}) | rpl::map([=] {
 		return currentPanel(session, true);
 	}) | rpl::distinct_until_changed();
+}
+
+rpl::producer<std::vector<JobInfo>> Manager::jobs(
+		not_null<Main::Session*> session) const {
+	return _jobChanges.events_starting_with({}) | rpl::map([=] {
+		auto result = std::vector<JobInfo>();
+		for (const auto &job : _jobs) {
+			if (job->session == session) {
+				result.push_back({ job->id, job->title, job->state });
+			}
+		}
+		return result;
+	});
+}
+
+void Manager::activate(uint64 id, not_null<Main::Session*> session) {
+	const auto i = ranges::find_if(_jobs, [=](const auto &job) {
+		return job->id == id && job->session == session;
+	});
+	if (i != end(_jobs)) {
+		(*i)->panel->activatePanel();
+	}
 }
 
 bool Manager::inProgress() const {
@@ -227,11 +256,13 @@ void Manager::stop(uint64 id) {
 	auto stopped = std::move(*i);
 	_jobs.erase(i);
 	_viewChanges.fire({});
+	_jobChanges.fire({});
 }
 
 void Manager::stop() {
 	auto stopped = base::take(_jobs);
 	_viewChanges.fire({});
+	_jobChanges.fire({});
 }
 
 } // namespace Export

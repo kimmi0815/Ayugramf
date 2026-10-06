@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 namespace Export {
 struct Settings;
+struct JobInfo;
 } // namespace Export
 
 namespace Export {
@@ -26,6 +27,7 @@ struct Content {
 	};
 
 	std::vector<Row> rows;
+	QString title;
 
 	static const QString kDoneId;
 
@@ -35,6 +37,8 @@ struct Content {
 	not_null<Settings*> settings,
 	const ProcessingState &state);
 [[nodiscard]] Content ContentFromState(const FinishedState &state);
+[[nodiscard]] Content ContentFromJob(const JobInfo &job);
+[[nodiscard]] Content ContentFromJobs(const std::vector<JobInfo> &jobs);
 
 [[nodiscard]] inline auto ContentFromState(
 		not_null<Settings*> settings,

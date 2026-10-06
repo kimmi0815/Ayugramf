@@ -17,6 +17,11 @@ late state delivery after removal, processing panel selection, a newly opened
 settings panel while another export runs, completion/error/cancellation
 transitions, account session replacement, scoped logout, quit confirmation,
 pending callback ownership, and repeated observer subscription destruction.
+The 16 manager cases also cover account-scoped snapshots of every job, latest
+item/byte progress on subscription, updates without a state-type change, settings
+rows alongside running jobs, chat/topic titles, stable-ID activation, terminal
+states and their output details, stale IDs after removal/account replacement,
+reentrant job removal and observer disconnection, and producer destruction.
 
 `fake_domain.h` replaces Qt panels, sessions, peers and export controllers.
 Their event streams and lifetimes use real RPL. State delivery is synchronous,
@@ -64,11 +69,15 @@ definitions with the actual `Settings` header and actual
 `export_takeout_session.cpp` and header. A reduced test declaration supplies
 the ApiWrap members and injects settings and the shared session; the full
 ApiWrap constructor, remaining methods and background actor are not compiled.
-Its callback runner models the native actor's weak lifetime guard. The nine
+Its callback runner models the native actor's weak lifetime guard. The 13
 tests check start/finish/cancel, settings permissions and media limits, starting
 a second chat while the first still requests data, cancellation before self-id,
 main acquisition and ready delivery, independent in-flight request cancellation,
-and finish failure after the worker actor is destroyed.
+and finish failure after the worker actor is destroyed. The waiting tests also
+compile the production waiting-stream accessor and extract the actual State
+structs plus ControllerObject::setState(), waitingForTakeoutChanged(), and
+stopped(). They check normalized output paths and initializing-only waiting
+updates; full Controller construction and Qt/background dispatch remain shims.
 
 The fake server maintains one active takeout ID per account. Creating another
 takeout invalidates the previous ID; requests using it fail with
@@ -81,7 +90,7 @@ FAIL starting_second_chat_keeps_first_chat_alive: first chat stopped after secon
 
 `run_takeout_session.sh` compiles the actual complete TakeoutSession source and
 header, and extracts the unchanged account factory from `export_manager.cpp`.
-Twenty tests exercise compatible leases, per-job completion and cancellation,
+The 25 tests exercise compatible leases, per-job completion and cancellation,
 last-job cleanup, permission and file-limit incompatibility queues, joined
 pending initialization, init failure fanout and queued retry, pending/queued
 cancellation, late ready delivery, account factory reuse and replacement,
@@ -89,7 +98,10 @@ owner destruction before init response or callback delivery, MTP instance
 destruction and closed-instance errors, reentrant ready callbacks, acquisitions
 during finish, and finish failures. Init flood waits, server errors and negative
 transport errors must be delivered as terminal errors to prevent retained
-initialization from silently retrying after its account closes.
+initialization from silently retrying after its account closes. Waiting tests
+cover incompatible permissions/file limits, joining compatible initialization,
+promotion before the initialization response, canceled queued notification
+delivery, and cancellation inside the ready callback.
 
 The transport, generated MTP types, QObject destruction/weak pointers,
 `crl::on_main` dispatch and Main::Session lifetime are shims. Transport dispatch
@@ -105,3 +117,8 @@ Both takeout runners accept `--case <test_name>` for a single case. The optional
 `TAKEOUT_API_SOURCE`, `TAKEOUT_SESSION_SOURCE`, and `TAKEOUT_MANAGER_SOURCE`
 environment variables select temporary source copies for mutation checks;
 normal invocations compile the current repository sources.
+
+The all-jobs list, row painting, focus/scroll preservation, top-bar animation
+and native click handling are not covered by these standalone suites. The UI
+source is syntax-checked with native Qt/generated headers; app rendering and
+interaction verification require a later explicitly authorized Debug build.

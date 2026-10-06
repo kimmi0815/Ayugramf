@@ -29,12 +29,38 @@ if sys.argv[1] == "--factory":
     Path(sys.argv[3]).write_text("namespace Export {\n\n" + function + "\n\n}\n")
     sys.exit(0)
 
+if sys.argv[1] == "--controller-state":
+    source = Path(sys.argv[2]).read_text()
+    header = Path(sys.argv[3]).read_text()
+    parts = [definition(header, "struct " + name) + ";" for name in [
+        "PasswordCheckState",
+        "ProcessingState",
+        "ApiErrorState",
+        "OutputErrorState",
+        "CancelledState",
+        "FinishedState",
+    ]]
+    parts.append(re.search(r"using State = std::variant<.*?;", header, re.S).group())
+    Path(sys.argv[4]).write_text(
+        "namespace Export {\n\n" + "\n\n".join(parts) + "\n\n}\n"
+    )
+    parts = [definition(source, signature) for signature in [
+        "bool ControllerObject::stopped() const",
+        "void ControllerObject::setState(",
+        "void ControllerObject::waitingForTakeoutChanged(",
+    ]]
+    Path(sys.argv[5]).write_text(
+        "namespace Export {\n\n" + "\n\n".join(parts) + "\n\n}\n"
+    )
+    sys.exit(0)
+
 source = Path(sys.argv[1]).read_text()
 builder_begin = source.index("template <typename Request>\nclass ApiWrap::RequestBuilder")
 builder_end = source.index("ApiWrap::LoadedFileCache::LoadedFileCache", builder_begin)
 parts = [source[builder_begin:builder_end].rstrip()]
 parts.append(definition(source, "template <typename Request>\nauto ApiWrap::mainRequest"))
 parts.extend(definition(source, signature) for signature in [
+    "rpl::producer<bool> ApiWrap::waitingForTakeout() const",
     "void ApiWrap::startMainSession(",
     "void ApiWrap::finishExport(",
     "void ApiWrap::cancelExportFast(",
